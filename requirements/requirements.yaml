@@ -1,0 +1,37 @@
+name: pytorch2vit
+channels:
+  - defaults
+  - pytorch
+  - nvidia
+  - xformers
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pytorch::pytorch=2.0.0
+  - pytorch::pytorch-cuda=11.7.0
+  - pytorch::torchvision=0.15.0
+  - omegaconf
+  - torchmetrics=0.10.3
+  - fvcore
+  - iopath
+  - matplotlib 
+  - tqdm
+  - tensorboardx
+  - pandas
+  - scikit-learn
+  - scikit-image
+  - jupyter
+  - xformers::xformers=0.0.18
+  - pip
+  - pip:
+    - git+https://github.com/facebookincubator/submitit
+    - --extra-index-url https://pypi.nvidia.com
+    - cuml-cu11
+    - opencv-python
+    - nibabel
+    - torchio
+    - pydicom
+    - pylibjpeg[libjpeg,openjpeg,rle]
+    - tensorboard
+    - timm
+
