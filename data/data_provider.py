@@ -30,7 +30,7 @@ class vindr_data_loader_2D(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
-    def __init__(self, cfg_path, mode='train', augment=False, size224=False):
+    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
         """
         Parameters
         ----------
@@ -53,9 +53,11 @@ class vindr_data_loader_2D(Dataset):
         # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "5000_officialsoroosh_master_list.csv"), sep=',')
         # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "2000_officialsoroosh_master_list.csv"), sep=',')
 
-        if size224:
+        if image_size == 224:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
-        else:
+        elif image_size == 336:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed336')
+        elif image_size == 512:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
 
         if mode == 'train':
@@ -145,7 +147,7 @@ class vindr_pediatric_data_loader_2D(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
-    def __init__(self, cfg_path, mode='train', augment=False, size224=False):
+    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
         """
         Parameters
         ----------
@@ -166,9 +168,11 @@ class vindr_pediatric_data_loader_2D(Dataset):
         # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master_list.csv"), sep=',')
         self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master_list_vindr-pcxr.csv"), sep=',')
 
-        if size224:
+        if image_size == 224:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
-        else:
+        elif image_size == 336:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed336')
+        elif image_size == 512:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
 
         if mode == 'train':
@@ -251,7 +255,7 @@ class chexpert_data_loader_2D(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
-    def __init__(self, cfg_path, mode='train', augment=False, size224=False):
+    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
         """
         Parameters
         ----------
@@ -267,7 +271,7 @@ class chexpert_data_loader_2D(Dataset):
         self.cfg_path = cfg_path
         self.params = read_config(cfg_path)
         self.augment = augment
-        self.size224 = size224
+        self.image_size = image_size
         self.file_base_dir = self.params['file_path']
         # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "master_list.csv"), sep=',')
         self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "nothree_master_list_20percenttest.csv"), sep=',')
@@ -315,10 +319,13 @@ class chexpert_data_loader_2D(Dataset):
         label: torch tensor
         """
         img_path = os.path.join(self.file_base_dir, self.file_path_list[idx])
-        if self.size224:
+        if self.image_size == 224:
             img_path = img_path.replace("/CheXpert-v1.0/", "/CheXpert-v1.0/preprocessed224/")
+        elif self.image_size == 336:
+            img_path = img_path.replace("/CheXpert-v1.0/", "/CheXpert-v1.0/preprocessed336/")
         else:
             img_path = img_path.replace("/CheXpert-v1.0/", "/CheXpert-v1.0/preprocessed/")
+
         img = cv2.imread(img_path) # (h, w, d)
 
         if self.augment:
@@ -370,7 +377,7 @@ class mimic_data_loader_2D(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
-    def __init__(self, cfg_path, mode='train', augment=False, size224=False):
+    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
         """
         Parameters
         ----------
@@ -385,7 +392,7 @@ class mimic_data_loader_2D(Dataset):
 
         self.cfg_path = cfg_path
         self.params = read_config(cfg_path)
-        self.size224 = size224
+        self.image_size = image_size
         self.augment = augment
         self.file_base_dir = self.params['file_path']
         self.file_base_dir = os.path.join(self.file_base_dir, "MIMIC")
@@ -436,8 +443,10 @@ class mimic_data_loader_2D(Dataset):
         """
         img_path = os.path.join(self.file_base_dir, self.file_path_list[idx])
 
-        if self.size224:
+        if self.image_size == 224:
             img_path = img_path.replace("/files/", "/preprocessed224/")
+        elif self.image_size == 336:
+            img_path = img_path.replace("/files/", "/preprocessed336/")
         else:
             img_path = img_path.replace("/files/", "/preprocessed/")
         img = cv2.imread(img_path) # (h, w, d)
@@ -491,7 +500,7 @@ class UKA_data_loader_2D(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
-    def __init__(self, cfg_path, mode='train', augment=False, size224=False):
+    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
         """
         Parameters
         ----------
@@ -518,10 +527,12 @@ class UKA_data_loader_2D(Dataset):
         elif mode == 'test':
             self.subset_df = self.org_df[self.org_df['split'] == 'test']
 
-        if size224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'UKA_preprocessed224')
-        else:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'UKA_preprocessed')
+        if image_size == 224:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
+        elif image_size == 336:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed336')
+        elif image_size == 512:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
 
         self.file_path_list = list(self.subset_df['image_id'])
 
@@ -645,7 +656,7 @@ class cxr14_data_loader_2D(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
-    def __init__(self, cfg_path, mode='train', augment=False, size224=False):
+    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
         """
         Parameters
         ----------
@@ -665,8 +676,10 @@ class cxr14_data_loader_2D(Dataset):
         self.file_base_dir = os.path.join(self.file_base_dir, 'NIH_ChestX-ray14')
         self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "final_cxr14_master_list.csv"), sep=',')
 
-        if size224:
+        if image_size == 224:
             self.file_base_dir = os.path.join(self.file_base_dir, 'CXR14', 'preprocessed224')
+        elif image_size == 336:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'CXR14', 'preprocessed336')
         else:
             self.file_base_dir = os.path.join(self.file_base_dir, 'CXR14', 'preprocessed')
 
@@ -754,7 +767,7 @@ class padchest_data_loader_2D(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
-    def __init__(self, cfg_path, mode='train', augment=False, size224=False):
+    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
         """
         Parameters
         ----------
@@ -774,8 +787,10 @@ class padchest_data_loader_2D(Dataset):
         self.file_base_dir = os.path.join(self.file_base_dir, 'padchest')
         self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "padchest_master_list_20percenttest.csv"), sep=',')
 
-        if size224:
+        if image_size == 224:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
+        elif image_size == 336:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed336')
         else:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
 

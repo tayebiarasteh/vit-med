@@ -28,7 +28,7 @@ warnings.filterwarnings('ignore')
 
 
 def main_train_central_2D(global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml", valid=False,
-                  resume=False, augment=False, experiment_name='name', dataset_name='vindr', pretrained=False, vit=False, size224=False, batch_size=30, lr=1e-5):
+                  resume=False, augment=False, experiment_name='name', dataset_name='vindr', pretrained=False, vit=False, image_size=224, batch_size=30, lr=1e-5):
     """Main function for training + validation centrally
 
         Parameters
@@ -56,26 +56,26 @@ def main_train_central_2D(global_config_path="/home/soroosh/Documents/Repositori
     cfg_path = params["cfg_path"]
 
     if dataset_name == 'vindr':
-        train_dataset = vindr_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, size224=size224)
-        valid_dataset = vindr_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, size224=size224)
+        train_dataset = vindr_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = vindr_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'vindr_pediatric':
-        train_dataset = vindr_pediatric_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, size224=size224)
-        valid_dataset = vindr_pediatric_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, size224=size224)
+        train_dataset = vindr_pediatric_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = vindr_pediatric_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'chexpert':
-        train_dataset = chexpert_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, size224=size224)
-        valid_dataset = chexpert_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, size224=size224)
+        train_dataset = chexpert_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = chexpert_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'mimic':
-        train_dataset = mimic_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, size224=size224)
-        valid_dataset = mimic_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, size224=size224)
+        train_dataset = mimic_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = mimic_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'UKA':
-        train_dataset = UKA_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, size224=size224)
-        valid_dataset = UKA_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, size224=size224)
+        train_dataset = UKA_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = UKA_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'cxr14':
-        train_dataset = cxr14_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, size224=size224)
-        valid_dataset = cxr14_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, size224=size224)
+        train_dataset = cxr14_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = cxr14_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'padchest':
-        train_dataset = padchest_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, size224=size224)
-        valid_dataset = padchest_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, size224=size224)
+        train_dataset = padchest_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = padchest_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
 
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size,
                                                pin_memory=True, drop_last=True, shuffle=True, num_workers=10)
@@ -88,14 +88,9 @@ def main_train_central_2D(global_config_path="/home/soroosh/Documents/Repositori
     else:
         valid_loader = None
 
-    if size224:
-        imgsize = 224
-    else:
-        imgsize = 512
-
     # Changeable network parameters
     if vit:
-        # model = load_pretrained_timm_model(num_classes=len(weight), pretrained=pretrained, imgsize=imgsize)
+        # model = load_pretrained_timm_model(num_classes=len(weight), pretrained=pretrained, imgsize=image_size)
         model = load_pretrained_dinov2(num_classes=len(weight))
     else:
         model = load_pretrained_model_1FC(num_classes=len(weight), resnet_num=50, pretrained=pretrained)
@@ -237,54 +232,6 @@ def main_test_central_2D(global_config_path="/home/soroosh/Documents/Repositorie
         msg = f'{pathology}: {average_specificity[idx] * 100:.2f}% | '
         with open(os.path.join(params['target_dir'], params['stat_log_path']) + '/test_Stats', 'a') as f:
             f.write(msg)
-
-
-
-def load_pretrained_model_1FC(num_classes=2, resnet_num=34, pretrained=False):
-    # Load a pre-trained model from config file
-
-    # Load a pre-trained model from Torchvision
-    if resnet_num == 34:
-        model = models.resnet34(pretrained=pretrained)
-        for param in model.parameters():
-            param.requires_grad = True
-        model.fc = torch.nn.Sequential(
-            torch.nn.Linear(512, num_classes))  # for resnet 34
-
-    elif resnet_num == 50:
-        model = models.resnet50(pretrained=pretrained)
-        for param in model.parameters():
-            param.requires_grad = True
-        model.fc = torch.nn.Sequential(
-        torch.nn.Linear(2048, num_classes)) # for resnet 50
-
-    return model
-
-
-def load_pretrained_timm_model(num_classes=2, model_name='vit_base_patch16_224', pretrained=False, imgsize=512):
-    # Load a pre-trained model from config file
-
-    model = timm.create_model(model_name, num_classes=num_classes, img_size=imgsize, pretrained=pretrained)
-
-    for param in model.parameters():
-        param.requires_grad = True
-
-    return model
-
-
-
-def load_pretrained_dinov2(num_classes=2, model_name='vit_base_patch16_224'):
-    # Load a pre-trained model from config file
-
-    # model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
-    model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14')
-    model.head = torch.nn.Linear(in_features=768, out_features=num_classes)
-    # model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitl14')
-
-    for param in model.parameters():
-        param.requires_grad = True
-
-    return model
 
 
 
@@ -435,13 +382,61 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/home/soroo
         f.write(msg)
 
 
+def load_pretrained_model_1FC(num_classes=2, resnet_num=34, pretrained=False):
+    # Load a pre-trained model from config file
+
+    # Load a pre-trained model from Torchvision
+    if resnet_num == 34:
+        model = models.resnet34(pretrained=pretrained)
+        for param in model.parameters():
+            param.requires_grad = True
+        model.fc = torch.nn.Sequential(
+            torch.nn.Linear(512, num_classes))  # for resnet 34
+
+    elif resnet_num == 50:
+        model = models.resnet50(pretrained=pretrained)
+        for param in model.parameters():
+            param.requires_grad = True
+        model.fc = torch.nn.Sequential(
+        torch.nn.Linear(2048, num_classes)) # for resnet 50
+
+    return model
+
+
+def load_pretrained_timm_model(num_classes=2, model_name='vit_base_patch16_224', pretrained=False, imgsize=512):
+    # Load a pre-trained model from config file
+
+    model = timm.create_model(model_name, num_classes=num_classes, img_size=imgsize, pretrained=pretrained)
+
+    for param in model.parameters():
+        param.requires_grad = True
+
+    return model
+
+
+
+def load_pretrained_dinov2(num_classes=2, model_name='vit_base_patch16_224'):
+    # Load a pre-trained model from config file
+
+    # model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
+    model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14')
+    model.head = torch.nn.Linear(in_features=768, out_features=num_classes)
+    # model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitl14')
+
+    for param in model.parameters():
+        param.requires_grad = True
+
+    return model
+
+
+
 
 
 
 if __name__ == '__main__':
-    # delete_experiment(experiment_name='padchest_resnet50_224_5labels_lr5e5', global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml")
+    delete_experiment(experiment_name='teeeet', global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml")
     # main_train_central_2D(global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml",
     #               valid=True, resume=False, augment=True, experiment_name='temp', dataset_name='vindr', pretrained=True, vit=True, size224=True, batch_size=32, lr=1e-5)
     main_train_central_2D(global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml",
-                  valid=True, resume=False, augment=True, experiment_name='padchest_resnet50_224_5labels_lr5e5', dataset_name='vindr',
-                          pretrained=True, vit=True, size224=True, batch_size=32, lr=1e-5)
+                  valid=True, resume=False, augment=True, experiment_name='teeeet', dataset_name='vindr',
+                          pretrained=True, vit=True, image_size=224, batch_size=2, lr=1e-5)
