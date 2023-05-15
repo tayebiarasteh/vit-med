@@ -518,7 +518,7 @@ class UKA_data_loader_2D(Dataset):
         self.augment = augment
         self.file_base_dir = self.params['file_path']
         self.file_base_dir = os.path.join(self.file_base_dir, 'UKA/chest_radiograph')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "DP_project_also_original/original_novalid_UKA_master_list.csv"), sep=',')
+        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "labels/original_novalid_UKA_master_list.csv"), sep=',')
 
         if mode == 'train':
             self.subset_df = self.org_df[self.org_df['split'] == 'train']
@@ -528,11 +528,11 @@ class UKA_data_loader_2D(Dataset):
             self.subset_df = self.org_df[self.org_df['split'] == 'test']
 
         if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
+            self.file_base_dir = os.path.join(self.file_base_dir, 'UKA_preprocessed224')
         elif image_size == 336:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed336')
+            self.file_base_dir = os.path.join(self.file_base_dir, 'UKA_preprocessed336')
         elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
+            self.file_base_dir = os.path.join(self.file_base_dir, 'UKA_preprocessed')
 
         self.file_path_list = list(self.subset_df['image_id'])
 
@@ -791,6 +791,8 @@ class padchest_data_loader_2D(Dataset):
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
         elif image_size == 336:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed336')
+        elif image_size == 504:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed504')
         else:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
 
