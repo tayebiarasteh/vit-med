@@ -80,7 +80,9 @@ class vindr_data_loader_2D(Dataset):
         # self.chosen_labels = ['No finding', 'Cardiomegaly', 'Pleural effusion', 'Pneumonia', 'Atelectasis', 'Consolidation', 'Pleural thickening', 'COPD', 'Pulmonary fibrosis', 'Emphysema', 'Nodule/Mass', 'Infiltration'] # for comparison to padchest
         #### for comparisons #####
 
-        self.chosen_labels = ['Cardiomegaly', 'Pleural effusion', 'Pneumonia', 'Atelectasis', 'No finding']
+        # self.chosen_labels = ['Cardiomegaly', 'Pleural effusion', 'Pneumonia', 'Atelectasis', 'No finding']
+        self.chosen_labels = ['Cardiomegaly', 'Pleural effusion', 'Pneumonia', 'Atelectasis', 'No finding', 'Consolidation', 'Pneumothorax'] # for federated learning
+        # self.chosen_labels = ['Pneumonia', 'Pneumonia', 'Pneumonia']
 
 
 
@@ -296,7 +298,10 @@ class chexpert_data_loader_2D(Dataset):
         # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'atelectasis', 'no_finding', 'pneumonia', 'consolidation'] # for comparison to padchest
         #### for comparisons #####
 
-        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding']
+        # self.chosen_labels = ['atelectasis', 'cardiomegaly', 'pneumonia', 'edema', 'enlarged_cardiomediastinum', 'fracture', 'lung_lesion', 'lung_opacity', 'no_finding', 'pleural_effusion', 'pleural_other', 'consolidation', 'pneumothorax', 'support_devices'] # all labels
+        # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding']
+        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax'] # for federated learning
+        # self.chosen_labels = ['pneumonia', 'pneumonia', 'pneumonia']
 
 
 
@@ -420,7 +425,10 @@ class mimic_data_loader_2D(Dataset):
         # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'atelectasis', 'no_finding', 'pneumonia', 'consolidation'] # for comparison to padchest
         #### for comparisons #####
 
-        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding']
+        # self.chosen_labels = ['atelectasis', 'cardiomegaly', 'pneumonia', 'edema', 'enlarged_cardiomediastinum', 'fracture', 'lung_lesion', 'lung_opacity', 'no_finding', 'pleural_effusion', 'pleural_other', 'consolidation', 'pneumothorax', 'support_devices'] # all labels
+        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax'] # for federated learning
+        # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding']
+        # self.chosen_labels = ['pneumonia', 'pneumonia', 'pneumonia']
 
 
 
@@ -537,6 +545,7 @@ class UKA_data_loader_2D(Dataset):
         self.file_path_list = list(self.subset_df['image_id'])
 
         self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'healthy'] # 5 labels
+        # self.chosen_labels = ['pneumonia', 'pneumonia', 'pneumonia']
 
 
 
@@ -577,9 +586,9 @@ class UKA_data_loader_2D(Dataset):
                     label[idx] = 1
                 elif int(label_df[self.chosen_labels[idx]].values[0]) == 4:
                     label[idx] = 1
-                elif int(label_df[self.chosen_labels[idx]].values[0]) == 1:
+                elif int(label_df[self.chosen_labels[idx]].values[0]) > 4:
                     label[idx] = 0
-                elif int(label_df[self.chosen_labels[idx]].values[0]) == 2:
+                elif int(label_df[self.chosen_labels[idx]].values[0]) < 3:
                     label[idx] = 0
 
             elif self.chosen_labels[idx] == 'pleural_effusion':
@@ -602,6 +611,12 @@ class UKA_data_loader_2D(Dataset):
                 if int(label_df['pneumonic_infiltrates_right'].values[0]) == 3 or int(label_df['pneumonic_infiltrates_left'].values[0]) == 3:
                     label[idx] = 1
                 elif int(label_df['pneumonic_infiltrates_right'].values[0]) == 4 or int(label_df['pneumonic_infiltrates_left'].values[0]) == 4:
+                    label[idx] = 1
+                else:
+                    label[idx] = 0
+
+            elif self.chosen_labels[idx] == 'healthy':
+                if int(label_df['healthy'].values[0]) == 1:
                     label[idx] = 1
                 else:
                     label[idx] = 0
@@ -642,6 +657,8 @@ class UKA_data_loader_2D(Dataset):
                 disease_length += sum(train_df['pneumonic_infiltrates_left'].values == 3)
                 disease_length += sum(train_df['pneumonic_infiltrates_right'].values == 4)
                 disease_length += sum(train_df['pneumonic_infiltrates_left'].values == 4)
+            elif diseases == 'healthy':
+                disease_length = sum(train_df['healthy'].values == 1)
             else:
                 disease_length = sum(train_df[diseases].values == 3)
                 disease_length += sum(train_df[diseases].values == 4)
@@ -700,7 +717,9 @@ class cxr14_data_loader_2D(Dataset):
         # self.chosen_labels = ['cardiomegaly', 'effusion', 'atelectasis', 'infiltration', 'no_finding', 'pneumonia', 'fibrosis', 'emphysema', 'hernia', 'pleural_thickening', 'consolidation'] # for comparison to padchest
         #### for comparisons #####
 
-        self.chosen_labels = ['cardiomegaly', 'effusion', 'pneumonia', 'atelectasis', 'no_finding']
+        # self.chosen_labels = ['cardiomegaly', 'effusion', 'pneumonia', 'atelectasis', 'no_finding']
+        self.chosen_labels = ['cardiomegaly', 'effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax'] # for federated learning
+        # self.chosen_labels = ['pneumonia', 'pneumonia', 'pneumonia']
 
 
 
@@ -818,7 +837,10 @@ class padchest_data_loader_2D(Dataset):
         # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'atelectasis', 'no_finding', 'pneumonia', 'consolidation'] # for comparison to mimic/chexpert
         #### for comparisons #####
 
-        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding']
+        # self.chosen_labels = ['pleural_effusion', 'cardiomegaly', 'pneumonia', 'no_finding', 'atelectasis', 'consolidation', 'pleural_thickening', 'COPD_signs', 'pulmonary_fibrosis', 'emphysema', 'nodule_mass', 'infiltrates']
+        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax'] # for federated learning
+        # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding']
+        # self.chosen_labels = ['pneumonia', 'pneumonia', 'pneumonia']
 
 
     def __len__(self):
