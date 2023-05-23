@@ -207,10 +207,41 @@ class Training:
 
         # Saves the model, optimiser,loss function name for writing to config file
         # self.model_info['optimiser'] = optimiser.__name__
-        # self.model_info['total_param_num'] = total_param_num
+        self.model_info['total_param_num'] = total_param_num
         # self.model_info['loss_function'] = loss_function.__name__
         self.params['Network'] = self.model_info
         write_config(self.params, self.cfg_path, sort_keys=True)
+
+
+
+    def load_checkpoints(self, model, loss_function_loader, weight_loader=None):
+        """In case of resuming training from a checkpoint,
+        loads the weights for all the models, optimizers, and
+        loss functions, and device, tensorboard events, number
+        of iterations (epochs), and every info from checkpoint.
+
+        Parameters
+        ----------
+        model: model file
+            The network
+        """
+        checkpoint = torch.load(os.path.join(self.params['target_dir'], self.params['network_output_path'],
+                                self.params['checkpoint_name']))
+        self.device = None
+        self.model_info = checkpoint['model_info']
+        self.setup_cuda()
+        self.model = model.to(self.device)
+
+        self.model.load_state_dict(checkpoint['model_state_dict'])
+        self.epoch = checkpoint['epoch']
+        self.writer = SummaryWriter(log_dir=os.path.join(os.path.join(
+            self.params['target_dir'], self.params['tb_logs_path'])), purge_step=self.epoch + 1)
+        # self.model = self.model.half() # float16
+
+        self.loss_function_loader = []
+        for index in range(len(loss_function_loader)):
+            self.loss_function_loader.append(loss_function_loader[index](pos_weight=weight_loader[index].to(self.device)))
+
 
 
     def train_epoch(self, train_loader, valid_loader=None, num_epochs=1000):
@@ -368,7 +399,7 @@ class Training:
 
             for idx in range(len(train_loader)):
                 print('loss client{}: {:.3f}'.format((idx + 1), loss_client_list[idx]))
-                self.writer.add_scalar('Train_loss_client' + str(idx + 1), loss_client_list[idx], self.epoch)
+                # self.writer.add_scalar('Train_loss_client' + str(idx + 1), loss_client_list[idx], self.epoch)
 
             # Saves information about training to config file
             self.params['Network']['num_epoch'] = self.epoch
@@ -975,7 +1006,7 @@ class Training:
             # self.writer.add_scalar('Valid_loss_model_' + str(idx), valid_loss[idx], self.epoch)
             # self.writer.add_scalar('valid_avg_F1_model_' + str(idx), valid_F1[idx].mean(), self.epoch)
             self.writer.add_scalar('Valid_avg_AUC_model_' + str(idx), valid_AUC[idx].mean(), self.epoch)
-            self.writer.add_scalar('Valid_pneumonia_AUC_model_', valid_AUC[idx][2], self.epoch)
+            # self.writer.add_scalar('Valid_pneumonia_AUC_model_', valid_AUC[idx][2], self.epoch)
             # for i, pathology in enumerate(self.label_names_loader[idx]):
             #     self.writer.add_scalar('valid_F1_' + pathology, valid_F1[idx][i], self.epoch)
 
