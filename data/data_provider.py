@@ -50,8 +50,6 @@ class vindr_data_loader_2D(Dataset):
         self.file_base_dir = os.path.join(self.file_base_dir, 'vindr-cxr1')
         # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master_list.csv"), sep=',')
         self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "officialsoroosh_master_list.csv"), sep=',')
-        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "5000_officialsoroosh_master_list.csv"), sep=',')
-        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "2000_officialsoroosh_master_list.csv"), sep=',')
 
         if image_size == 224:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
@@ -145,119 +143,11 @@ class vindr_data_loader_2D(Dataset):
 
 
 
-class vindr_pediatric_data_loader_2D(Dataset):
-    """
-    This is the pipeline based on Pytorch's Dataset and Dataloader
-    """
-    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
-        """
-        Parameters
-        ----------
-        cfg_path: str
-            Config file path of the experiment
-
-        mode: str
-            Nature of operation to be done with the data.
-                Possible inputs are train, valid, test
-                Default value: train
-        """
-
-        self.cfg_path = cfg_path
-        self.params = read_config(cfg_path)
-        self.augment = augment
-        self.file_base_dir = self.params['file_path']
-        self.file_base_dir = os.path.join(self.file_base_dir, 'vindr-pcxr')
-        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master_list.csv"), sep=',')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master_list_vindr-pcxr.csv"), sep=',')
-
-        if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
-        elif image_size == 336:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed336')
-        elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
-
-        if mode == 'train':
-            self.subset_df = self.org_df[self.org_df['split'] == 'train']
-            self.file_base_dir = os.path.join(self.file_base_dir, 'train')
-        elif mode == 'valid':
-            self.subset_df = self.org_df[self.org_df['split'] == 'valid']
-            self.file_base_dir = os.path.join(self.file_base_dir, 'train')
-        elif mode == 'test':
-            self.subset_df = self.org_df[self.org_df['split'] == 'test']
-            self.file_base_dir = os.path.join(self.file_base_dir, 'test')
-
-        self.file_path_list = list(self.subset_df['image_id'])
-
-        # self.chosen_labels = ['No finding', 'Pneumonia'] # Test on vindr/mimic/chexpert/cxr14
-
-        self.chosen_labels = ['Pneumonia', 'Pneumonia'] # for Pneumonia
-
-
-
-    def __len__(self):
-        """Returns the length of the dataset"""
-        return len(self.file_path_list)
-
-
-    def __getitem__(self, idx):
-        """
-        Parameters
-        ----------
-        idx: int
-
-        Returns
-        -------
-        img: torch tensor
-        label: torch tensor
-        """
-        img = cv2.imread(os.path.join(self.file_base_dir, self.file_path_list[idx] + '.jpg')) # (h, w, d)
-
-        if self.augment:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.RandomHorizontalFlip(p=0.5),
-                                        transforms.RandomRotation(degrees=10), transforms.ToTensor()])
-        else:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])
-        img = trans(img)
-
-        label_df = self.subset_df[self.subset_df['image_id'] == self.file_path_list[idx]]
-        label = torch.zeros((len(self.chosen_labels)))  # (h,)
-
-        for idx in range(len(self.chosen_labels)):
-            label[idx] = int(label_df[self.chosen_labels[idx]].values[0])
-        label = label.float()
-
-        # casting to float16
-        # img = img.half()
-        # label = label.half()
-
-        return img, label
-
-
-
-    def pos_weight(self):
-        """
-        Calculates a weight for positive examples for each class and returns it as a tensor
-        Only using the training set.
-        """
-
-        train_df = self.org_df[self.org_df['split'] == 'train']
-        full_length = len(train_df)
-        output_tensor = torch.zeros((len(self.chosen_labels)))
-
-        for idx, diseases in enumerate(self.chosen_labels):
-            disease_length = sum(train_df[diseases].values == 1)
-            output_tensor[idx] = (full_length - disease_length) / (disease_length + epsilon)
-
-        return output_tensor
-
-
-
 class chexpert_data_loader_2D(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
-    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
+    def __init__(self, cfg_path, mode='train', augment=False, image_size=224, site_num=0):
         """
         Parameters
         ----------
@@ -276,8 +166,21 @@ class chexpert_data_loader_2D(Dataset):
         self.image_size = image_size
         self.file_base_dir = self.params['file_path']
         # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "master_list.csv"), sep=',')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "nothree_master_list_20percenttest.csv"), sep=',')
-        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "5000_nothree_master_list_20percenttest.csv"), sep=',')
+        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "nothree_master_list_20percenttest.csv"), sep=',')
+        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "nothree_master_list_20percenttest_60k.csv"), sep=',')
+        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "nothree_master_list_20percenttest_15k.csv"), sep=',')
+
+        if mode == 'train':
+            if site_num==1:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "nothree_master_list_20percenttest_forIIDFL_15k1.csv"), sep=',')
+            elif site_num==2:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "nothree_master_list_20percenttest_forIIDFL_15k2.csv"), sep=',')
+            elif site_num==3:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "nothree_master_list_20percenttest_forIIDFL_15k3.csv"), sep=',')
+            elif site_num==4:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "nothree_master_list_20percenttest_forIIDFL_15k4.csv"), sep=',')
+        else:
+            self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "nothree_master_list_20percenttest.csv"), sep=',')
 
         if mode == 'train':
             self.subset_df = self.org_df[self.org_df['split'] == 'train']
@@ -382,7 +285,7 @@ class mimic_data_loader_2D(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
-    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
+    def __init__(self, cfg_path, mode='train', augment=False, image_size=224, site_num=0):
         """
         Parameters
         ----------
@@ -402,7 +305,21 @@ class mimic_data_loader_2D(Dataset):
         self.file_base_dir = self.params['file_path']
         self.file_base_dir = os.path.join(self.file_base_dir, "MIMIC")
         # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master_list.csv"), sep=',')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "nothree_master_list_20percenttest.csv"), sep=',')
+        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "nothree_master_list_20percenttest.csv"), sep=',')
+        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "nothree_master_list_20percenttest_60k.csv"), sep=',')
+        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "nothree_master_list_20percenttest_15k.csv"), sep=',')
+
+        if mode == 'train':
+            if site_num==1:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "nothree_master_list_20percenttest_forIIDFL_15k1.csv"), sep=',')
+            elif site_num==2:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "nothree_master_list_20percenttest_forIIDFL_15k2.csv"), sep=',')
+            elif site_num==3:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "nothree_master_list_20percenttest_forIIDFL_15k3.csv"), sep=',')
+            elif site_num==4:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "nothree_master_list_20percenttest_forIIDFL_15k4.csv"), sep=',')
+        else:
+            self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "nothree_master_list_20percenttest.csv"), sep=',')
 
         if mode == 'train':
             self.subset_df = self.org_df[self.org_df['split'] == 'train']
@@ -673,7 +590,7 @@ class cxr14_data_loader_2D(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
-    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
+    def __init__(self, cfg_path, mode='train', augment=False, image_size=224, site_num=0):
         """
         Parameters
         ----------
@@ -691,7 +608,21 @@ class cxr14_data_loader_2D(Dataset):
         self.augment = augment
         self.file_base_dir = self.params['file_path']
         self.file_base_dir = os.path.join(self.file_base_dir, 'NIH_ChestX-ray14')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "final_cxr14_master_list.csv"), sep=',')
+        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "final_cxr14_master_list.csv"), sep=',')
+        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "final_cxr14_master_list_60k.csv"), sep=',')
+        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "final_cxr14_master_list_15k.csv"), sep=',')
+
+        if mode == 'train':
+            if site_num==1:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "final_cxr14_master_list_forIIDFL_15k1.csv"), sep=',')
+            elif site_num==2:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "final_cxr14_master_list_forIIDFL_15k2.csv"), sep=',')
+            elif site_num==3:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "final_cxr14_master_list_forIIDFL_15k3.csv"), sep=',')
+            elif site_num==4:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "final_cxr14_master_list_forIIDFL_15k4.csv"), sep=',')
+        else:
+            self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "final_cxr14_master_list.csv"), sep=',')
 
         if image_size == 224:
             self.file_base_dir = os.path.join(self.file_base_dir, 'CXR14', 'preprocessed224')
@@ -786,7 +717,7 @@ class padchest_data_loader_2D(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
-    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
+    def __init__(self, cfg_path, mode='train', augment=False, image_size=224, site_num=0):
         """
         Parameters
         ----------
@@ -804,7 +735,21 @@ class padchest_data_loader_2D(Dataset):
         self.augment = augment
         self.file_base_dir = self.params['file_path']
         self.file_base_dir = os.path.join(self.file_base_dir, 'padchest')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "padchest_master_list_20percenttest.csv"), sep=',')
+        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "padchest_master_list_20percenttest.csv"), sep=',')
+        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "padchest_master_list_20percenttest_60k.csv"), sep=',')
+        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "padchest_master_list_20percenttest_15k.csv"), sep=',')
+
+        if mode == 'train':
+            if site_num==1:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "padchest_master_list_20percenttest_forIIDFL_15k1.csv"), sep=',')
+            elif site_num==2:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "padchest_master_list_20percenttest_forIIDFL_15k2.csv"), sep=',')
+            elif site_num==3:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "padchest_master_list_20percenttest_forIIDFL_15k3.csv"), sep=',')
+            elif site_num==4:
+                self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "padchest_master_list_20percenttest_forIIDFL_15k4.csv"), sep=',')
+        else:
+            self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "padchest_master_list_20percenttest.csv"), sep=',')
 
         if image_size == 224:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')

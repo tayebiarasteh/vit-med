@@ -15,11 +15,12 @@ from torchvision import transforms, models
 import timm
 import numpy as np
 from sklearn import metrics
+# from mne.stats import fdr_correction
 
 from config.serde import open_experiment, create_experiment, delete_experiment, write_config
 from Train_Valid_vitmed import Training
 from Prediction_vitmed import Prediction
-from data.data_provider import vindr_data_loader_2D, chexpert_data_loader_2D, mimic_data_loader_2D, UKA_data_loader_2D, cxr14_data_loader_2D, vindr_pediatric_data_loader_2D, padchest_data_loader_2D
+from data.data_provider import vindr_data_loader_2D, chexpert_data_loader_2D, mimic_data_loader_2D, UKA_data_loader_2D, cxr14_data_loader_2D, padchest_data_loader_2D
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -328,6 +329,109 @@ def main_train_federated_validall(global_config_path="/home/soroosh/Documents/Re
 
 
 
+def main_train_federated_validone(global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml",
+                  resume=False, augment=False, experiment_name='name', train_site='cxr14', pretrained=True, vit=False, dinov2=True, image_size=224, batch_size=30, lr=1e-5):
+    """
+
+        Parameters
+        ----------
+        global_config_path: str
+            always global_config_path="FLspeech/config/config.yaml"
+
+        resume: bool
+            if we are resuming training on a model
+
+        experiment_name: str
+            name of the experiment, in case of resuming training.
+            name of new experiment, in case of new training.
+    """
+    if resume == True:
+        params = open_experiment(experiment_name, global_config_path)
+    else:
+        params = create_experiment(experiment_name, global_config_path)
+    cfg_path = params["cfg_path"]
+    train_loader = []
+    valid_loader = []
+    weight_loader = []
+    loss_function_loader = []
+    label_names_loader = []
+
+    for idx in range(4):
+
+        if train_site == 'chexpert':
+            train_dataset_model = chexpert_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size, site_num=idx+1)
+        elif train_site == 'mimic':
+            train_dataset_model = mimic_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size, site_num=idx+1)
+        elif train_site == 'cxr14':
+            train_dataset_model = cxr14_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size, site_num=idx+1)
+        elif train_site == 'padchest':
+            train_dataset_model = padchest_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size, site_num=idx+1)
+
+        model_info = params['Network']
+        model_info['lr'] = lr
+        model_info['batch_size'] = batch_size
+        params['Network'] = model_info
+        write_config(params, cfg_path, sort_keys=True)
+
+        weight_model = train_dataset_model.pos_weight()
+        loss_function_model = BCEWithLogitsLoss
+        train_loader_model = torch.utils.data.DataLoader(dataset=train_dataset_model,
+                                                         batch_size=batch_size,
+                                                         pin_memory=True, drop_last=True, shuffle=True, num_workers=10)
+        train_loader.append(train_loader_model)
+        weight_loader.append(weight_model)
+        loss_function_loader.append(loss_function_model)
+
+    valid_dataset_vindr = vindr_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    label_names_vindr = valid_dataset_vindr.chosen_labels
+    label_names_loader.append(label_names_vindr)
+    valid_loader_vindr = torch.utils.data.DataLoader(dataset=valid_dataset_vindr, batch_size=batch_size, pin_memory=True, drop_last=False, shuffle=False, num_workers=5)
+    valid_loader.append(valid_loader_vindr)
+
+    valid_dataset_cxr14 = cxr14_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    label_names_cxr14 = valid_dataset_cxr14.chosen_labels
+    label_names_loader.append(label_names_cxr14)
+    valid_loader_cxr14 = torch.utils.data.DataLoader(dataset=valid_dataset_cxr14, batch_size=batch_size, pin_memory=True, drop_last=False, shuffle=False, num_workers=5)
+    valid_loader.append(valid_loader_cxr14)
+
+    valid_dataset_chexpert = chexpert_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    label_names_chexpert = valid_dataset_chexpert.chosen_labels
+    label_names_loader.append(label_names_chexpert)
+    valid_loader_chexpert = torch.utils.data.DataLoader(dataset=valid_dataset_chexpert, batch_size=batch_size, pin_memory=True, drop_last=False, shuffle=False, num_workers=5)
+    valid_loader.append(valid_loader_chexpert)
+
+    valid_dataset_mimic = mimic_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    label_names_mimic = valid_dataset_mimic.chosen_labels
+    label_names_loader.append(label_names_mimic)
+    valid_loader_mimic = torch.utils.data.DataLoader(dataset=valid_dataset_mimic, batch_size=batch_size, pin_memory=True, drop_last=False, shuffle=False, num_workers=5)
+    valid_loader.append(valid_loader_mimic)
+
+    valid_dataset_padchest = padchest_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    label_names_padchest = valid_dataset_padchest.chosen_labels
+    label_names_loader.append(label_names_padchest)
+    valid_loader_padchest = torch.utils.data.DataLoader(dataset=valid_dataset_padchest, batch_size=batch_size, pin_memory=True, drop_last=False, shuffle=False, num_workers=5)
+    valid_loader.append(valid_loader_padchest)
+
+    # Changeable network parameters for the global network
+    if vit:
+        if dinov2:
+            model = load_pretrained_dinov2(num_classes=len(weight_model))
+        else:
+            model = load_pretrained_timm_model(num_classes=len(weight_model), pretrained=pretrained, imgsize=image_size)
+    else:
+        model = load_pretrained_timm_model(num_classes=len(weight_model), model_name='resnet50d', pretrained=pretrained)
+
+    trainer = Training(cfg_path, resume=resume, label_names_loader=label_names_loader)
+
+    if resume == True:
+        pass
+        # trainer.load_checkpoint(model=model, optimiser=optimizer, loss_function=loss_function, weight=weight, label_names=label_names)
+    else:
+        trainer.setup_models(model=model, loss_function_loader=loss_function_loader, weight_loader=weight_loader)
+    trainer.training_setup_conventional_federated(train_loader=train_loader, valid_loader=valid_loader, vit=vit)
+
+
+
 
 def main_test_central_2D(global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml", experiment_name='central_exp_for_test', epoch_num=5,
                  dataset_name='vindr', vit=False, dinov2=True, image_size=224):
@@ -450,7 +554,7 @@ def main_test_central_2D(global_config_path="/home/soroosh/Documents/Repositorie
 
 def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml",
                                                  experiment_name1='central_exp_for_test', experiment_name2='central_exp_for_test',
-                                                 experiment1_epoch_num=100, experiment2_epoch_num=100, dataset_name='vindr', vit=False, size224=False):
+                                                 experiment1_epoch_num=100, experiment2_epoch_num=100, dataset_name='vindr', vit=False, dinov2=False, image_size=224):
     """Main function for multi label prediction
 
     Parameters
@@ -462,32 +566,30 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/home/soroo
     cfg_path1 = params1['cfg_path']
 
     if dataset_name == 'vindr':
-        test_dataset = vindr_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, size224=size224)
+        test_dataset = vindr_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'vindr_pediatric':
-        test_dataset = vindr_pediatric_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, size224=size224)
+        test_dataset = vindr_pediatric_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'chexpert':
-        test_dataset = chexpert_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, size224=size224)
+        test_dataset = chexpert_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'mimic':
-        test_dataset = mimic_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, size224=size224)
+        test_dataset = mimic_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'UKA':
-        test_dataset = UKA_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, size224=size224)
+        test_dataset = UKA_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'cxr14':
-        test_dataset = cxr14_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, size224=size224)
+        test_dataset = cxr14_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'padchest':
-        test_dataset = padchest_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, size224=size224)
+        test_dataset = padchest_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     weight = test_dataset.pos_weight()
     label_names = test_dataset.chosen_labels
 
-    if size224:
-        imgsize = 224
-    else:
-        imgsize = 512
-
-    # Changeable network parameters
+    # Changeable network parameters for the global network
     if vit:
-        model1 = load_pretrained_timm_model(num_classes=len(weight), imgsize=imgsize)
+        if dinov2:
+            model1 = load_pretrained_dinov2(num_classes=len(weight))
+        else:
+            model1 = load_pretrained_timm_model(num_classes=len(weight), imgsize=image_size)
     else:
-        model1 = load_pretrained_model_1FC(num_classes=len(weight), resnet_num=50)
+        model1 = load_pretrained_timm_model(num_classes=len(weight), model_name='resnet50d')
 
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=params1['Network']['batch_size'],
                                                pin_memory=True, drop_last=False, shuffle=False, num_workers=16)
@@ -504,9 +606,12 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/home/soroo
 
     # Changeable network parameters
     if vit:
-        model2 = load_pretrained_timm_model(num_classes=len(weight), imgsize=imgsize)
+        if dinov2:
+            model2 = load_pretrained_dinov2(num_classes=len(weight))
+        else:
+            model2 = load_pretrained_timm_model(num_classes=len(weight), imgsize=image_size)
     else:
-        model2 = load_pretrained_model_1FC(num_classes=len(weight), resnet_num=50)
+        model2 = load_pretrained_timm_model(num_classes=len(weight), model_name='resnet50d')
 
     # Initialize prediction 2
     params2 = open_experiment(experiment_name2, global_config_path)
@@ -520,11 +625,17 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/home/soroo
     for idx, pathology in enumerate(label_names):
         counter = AUC_list1[:, idx] > AUC_list2[:, idx]
         ratio1 = (len(counter) - counter.sum()) / len(counter)
+
+        reject_fdr, ratio1 = fdr_correction(ratio1, alpha=0.05, method='indep')
+
         if ratio1 <= 0.05:
             print(f'\t{pathology} p-value: {ratio1}; model 1 significantly higher AUC than model 2')
         else:
             counter = AUC_list2[:, idx] > AUC_list1[:, idx]
             ratio2 = (len(counter) - counter.sum()) / len(counter)
+
+            reject_fdr, ratio2 = fdr_correction(ratio2, alpha=0.05, method='indep')
+
             if ratio2 <= 0.05:
                 print(f'\t{pathology} p-value: {ratio2}; model 2 significantly higher AUC than model 1')
             else:
@@ -535,11 +646,17 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/home/soroo
     avgAUC_list2 = AUC_list2.mean(1)
     counter = avgAUC_list1 > avgAUC_list2
     ratio1 = (len(counter) - counter.sum()) / len(counter)
+
+    reject_fdr, ratio1 = fdr_correction(ratio1, alpha=0.05, method='indep')
+
     if ratio1 <= 0.05:
         print(f'\tp-value: {ratio1}; model 1 significantly higher AUC than model 2 on average')
     else:
         counter = avgAUC_list2 > avgAUC_list1
         ratio2 = (len(counter) - counter.sum()) / len(counter)
+
+        reject_fdr, ratio2 = fdr_correction(ratio2, alpha=0.05, method='indep')
+
         if ratio2 <= 0.05:
             print(f'\tp-value: {ratio2}; model 2 significantly higher AUC than model 1 on average')
         else:
@@ -554,11 +671,17 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/home/soroo
     for idx, pathology in enumerate(label_names):
         counter = AUC_list1[:, idx] > AUC_list2[:, idx]
         ratio1 = (len(counter) - counter.sum()) / len(counter)
+
+        reject_fdr, ratio1 = fdr_correction(ratio1, alpha=0.05, method='indep')
+
         if ratio1 <= 0.05:
             msg = f'\t{pathology} p-value: {ratio1}; model 1 significantly higher AUC than model 2'
         else:
             counter = AUC_list2[:, idx] > AUC_list1[:, idx]
             ratio2 = (len(counter) - counter.sum()) / len(counter)
+
+            reject_fdr, ratio2 = fdr_correction(ratio2, alpha=0.05, method='indep')
+
             if ratio2 <= 0.05:
                 msg = f'\t{pathology} p-value: {ratio2}; model 2 significantly higher AUC than model 1'
             else:
@@ -579,11 +702,17 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/home/soroo
     avgAUC_list2 = AUC_list2.mean(1)
     counter = avgAUC_list1 > avgAUC_list2
     ratio1 = (len(counter) - counter.sum()) / len(counter)
+
+    reject_fdr, ratio1 = fdr_correction(ratio1, alpha=0.05, method='indep')
+
     if ratio1 <= 0.05:
         msg = f'\tp-value: {ratio1}; model 1 significantly higher AUC than model 2 on average'
     else:
         counter = avgAUC_list2 > avgAUC_list1
         ratio2 = (len(counter) - counter.sum()) / len(counter)
+
+        reject_fdr, ratio2 = fdr_correction(ratio2, alpha=0.05, method='indep')
+
         if ratio2 <= 0.05:
             msg = f'\tp-value: {ratio2}; model 2 significantly higher AUC than model 1 on average'
         else:
@@ -638,10 +767,15 @@ if __name__ == '__main__':
     #               valid=True, resume=False, augment=True, experiment_name='padchest_resnet50_224_7labels_lr6e5', dataset_name='vindr',
     #                       pretrained=True, vit=False, dinov2=False, image_size=224, batch_size=128, lr=6e-5)
 
-    main_train_federated(global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml",
-                         valid=True, resume=False, augment=True, experiment_name='name', train_sites=['vindr', 'vindr'],
+    # main_train_federated(global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml",
+    #                      valid=True, resume=False, augment=True, experiment_name='name', train_sites=['vindr', 'vindr'],
+    #                      pretrained=True, vit=False, dinov2=False, image_size=224, batch_size=32, lr=1e-5)
+    #
+    # main_train_federated_validall(global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml",
+    #                      resume=False, augment=True, experiment_name='name', train_sites=['vindr', 'vindr'],
+    #                      pretrained=True, vit=False, dinov2=False, image_size=224, batch_size=32, lr=1e-5)
+
+    main_train_federated_validone(global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml",
+                         resume=False, augment=True, experiment_name='name', train_site='cxr14',
                          pretrained=True, vit=False, dinov2=False, image_size=224, batch_size=32, lr=1e-5)
 
-    main_train_federated_validall(global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml",
-                         resume=False, augment=True, experiment_name='name', train_sites=['vindr', 'vindr'],
-                         pretrained=True, vit=False, dinov2=False, image_size=224, batch_size=32, lr=1e-5)

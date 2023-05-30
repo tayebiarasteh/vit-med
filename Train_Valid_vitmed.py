@@ -426,7 +426,7 @@ class Training:
 
                 for idx in range(len(valid_loader)):
                     epoch_loss, average_f1_score, average_AUROC, average_accuracy, average_specificity, average_sensitivity, average_precision, optimal_threshold = self.valid_epoch_federated(
-                        valid_loader[idx], self.model, self.loss_function_loader[idx])
+                        valid_loader[idx], self.model)
                     valid_loss.append(epoch_loss)
                     valid_F1.append(average_f1_score)
                     valid_AUC.append(average_AUROC)
@@ -572,7 +572,7 @@ class Training:
 
 
 
-    def valid_epoch_federated(self, valid_loader, model, loss_function):
+    def valid_epoch_federated(self, valid_loader, model, loss_function=None):
         """Validation epoch
 
         Returns
@@ -608,8 +608,9 @@ class Training:
 
         ############ Evaluation metric calculation ########
 
-        loss = loss_function(logits_for_loss_cache.to(self.device), labels_cache.to(self.device))
-        epoch_loss = loss.item()
+        # loss = loss_function(logits_for_loss_cache.to(self.device), labels_cache.to(self.device))
+        # epoch_loss = loss.item()
+        epoch_loss = -1
 
         # threshold finding for metrics calculation
         preds_with_sigmoid_cache = preds_with_sigmoid_cache.cpu().numpy()
