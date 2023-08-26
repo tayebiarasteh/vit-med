@@ -19,7 +19,7 @@ from sklearn import metrics
 from config.serde import open_experiment, create_experiment, delete_experiment, write_config
 from Train_Valid_vitmed import Training
 from Prediction_vitmed import Prediction
-from data.data_provider import vindr_data_loader_2D, chexpert_data_loader_2D, mimic_data_loader_2D, UKA_data_loader_2D, cxr14_data_loader_2D, padchest_data_loader_2D
+from data.data_provider import vindr_data_loader_2D, chexpert_data_loader_2D, mimic_data_loader_2D, cxr14_data_loader_2D, padchest_data_loader_2D
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -64,9 +64,6 @@ def main_train_central_2D(global_config_path="/PATH/config.yaml", valid=False,
     elif dataset_name == 'mimic':
         train_dataset = mimic_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
         valid_dataset = mimic_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
-    elif dataset_name == 'UKA':
-        train_dataset = UKA_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
-        valid_dataset = UKA_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'cxr14':
         train_dataset = cxr14_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
         valid_dataset = cxr14_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
@@ -138,8 +135,6 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/PATH/confi
         test_dataset = chexpert_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'mimic':
         test_dataset = mimic_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
-    elif dataset_name == 'UKA':
-        test_dataset = UKA_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'cxr14':
         test_dataset = cxr14_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'padchest':
