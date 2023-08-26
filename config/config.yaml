@@ -10,7 +10,6 @@ checkpoint_name: checkpoint.tar
 trained_model_name: trained_model.pth
 
 # changeable items:
-file_path: /home/soroosh/Documents/datasets/XRay/
-target_dir: /home/soroosh/Documents/Repositories_target_files/vit-med/
+file_path: /PATH TO DATASET/
+target_dir: /WHERE YOU WANT TO STORE YOUR EXPERIMENTS/
 display_stats_freq: 1 # valid freq is equal to this
-#display_stats_freq: 100 # valid freq is equal to this

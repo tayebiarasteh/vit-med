@@ -15,12 +15,11 @@ from torchvision import transforms, models
 import timm
 import numpy as np
 from sklearn import metrics
-from mne.stats import fdr_correction
 
 from config.serde import open_experiment, create_experiment, delete_experiment, write_config
 from Train_Valid_vitmed import Training
 from Prediction_vitmed import Prediction
-from data.data_provider import vindr_data_loader_2D, PediCXR_data_loader_2D, chexpert_data_loader_2D, mimic_data_loader_2D, UKA_data_loader_2D, cxr14_data_loader_2D, padchest_data_loader_2D
+from data.data_provider import vindr_data_loader_2D, chexpert_data_loader_2D, mimic_data_loader_2D, UKA_data_loader_2D, cxr14_data_loader_2D, padchest_data_loader_2D
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -28,14 +27,14 @@ warnings.filterwarnings('ignore')
 
 
 
-def main_train_central_2D(global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml", valid=False,
+def main_train_central_2D(global_config_path="/PATH/config.yaml", valid=False,
                   resume=False, augment=False, experiment_name='name', dataset_name='vindr', pretrained=False, vit=False, dinov2=True, image_size=224, batch_size=30, lr=1e-5):
     """Main function for training + validation centrally
 
         Parameters
         ----------
         global_config_path: str
-            always global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml"
+            always global_config_path="/PATH/config.yaml"
 
         valid: bool
             if we want to do validation
@@ -59,9 +58,6 @@ def main_train_central_2D(global_config_path="/home/soroosh/Documents/Repositori
     if dataset_name == 'vindr':
         train_dataset = vindr_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
         valid_dataset = vindr_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
-    elif dataset_name == 'pedi-cxr':
-        train_dataset = PediCXR_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
-        valid_dataset = PediCXR_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'chexpert':
         train_dataset = chexpert_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
         valid_dataset = chexpert_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
@@ -123,9 +119,9 @@ def main_train_central_2D(global_config_path="/home/soroosh/Documents/Repositori
 
 
 
-def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml",
+def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/PATH/config.yaml",
                                                  experiment_name1='central_exp_for_test', experiment_name2='central_exp_for_test',
-                                                 experiment1_epoch_num=100, experiment2_epoch_num=100, dataset_name='vindr', vit=False, dinov2=False, image_size=224):
+                                                 experiment1_epoch_num=100, experiment2_epoch_num=100, dataset_name='vindr', vit_1=False, vit_2=False, dinov2_1=False, dinov2_2=False, image_size=224):
     """Main function for multi label prediction
 
     Parameters
@@ -138,8 +134,6 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/home/soroo
 
     if dataset_name == 'vindr':
         test_dataset = vindr_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
-    elif dataset_name == 'pedi-cxr':
-        test_dataset = PediCXR_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'chexpert':
         test_dataset = chexpert_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'mimic':
@@ -154,8 +148,8 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/home/soroo
     label_names = test_dataset.chosen_labels
 
     # Changeable network parameters for the global network
-    if vit:
-        if dinov2:
+    if vit_1:
+        if dinov2_1:
             model1 = load_pretrained_dinov2(num_classes=len(weight))
         else:
             model1 = load_pretrained_timm_model(num_classes=len(weight), imgsize=image_size)
@@ -176,8 +170,8 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/home/soroo
     AUC_list1 = predictor1.bootstrapper(pred_array1.cpu().numpy(), target_array1.int().cpu().numpy(), index_list, dataset_name)
 
     # Changeable network parameters
-    if vit:
-        if dinov2:
+    if vit_2:
+        if dinov2_2:
             model2 = load_pretrained_dinov2(num_classes=len(weight))
         else:
             model2 = load_pretrained_timm_model(num_classes=len(weight), imgsize=image_size)
@@ -298,15 +292,14 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/home/soroo
 
 def load_pretrained_timm_model(num_classes=2, model_name='vit_base_patch16_224_in21k', pretrained=False, imgsize=512):
     # Load a pre-trained model from config file
-
+    pdb.set_trace()
     if model_name == 'resnet50d':
-    # if model_name == 'densenet121':
         model = timm.create_model(model_name, num_classes=num_classes, pretrained=pretrained)
 
     else:
         model = timm.create_model(model_name, num_classes=num_classes, img_size=imgsize, pretrained=pretrained)
-        # model.load_state_dict(
-        #     torch.load('/home/arasteh/Documents/Repositories/vit-med/mimicpretraining_vitb16_imagenet_224.pth'))
+
+    model.load_state_dict(torch.load('/PATH/mimicpretraining_224.pth'))
 
     for param in model.parameters():
         param.requires_grad = True
@@ -317,9 +310,6 @@ def load_pretrained_timm_model(num_classes=2, model_name='vit_base_patch16_224_i
 
 def load_pretrained_dinov2(num_classes=2):
     # Load a pre-trained model from config file
-
-    # model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
-    # model.head = torch.nn.Linear(in_features=384, out_features=num_classes)
 
     model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14')
     model.head = torch.nn.Linear(in_features=768, out_features=num_classes)
@@ -337,11 +327,6 @@ def load_pretrained_dinov2(num_classes=2):
 
 
 if __name__ == '__main__':
-    # delete_experiment(experiment_name='padchest_mimicpretimagenet_vitb16_224_5labels_lr1e5', global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml")
-
-    main_test_central_2D_pvalue_out_of_bootstrap( global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml", experiment_name1='mimic_vitb16_ima22k_224_7labels_lr1e5',
-                                                  experiment_name2='FL_c14_chex_mim_pdc_vitB_224_7labels_lr1e5', experiment1_epoch_num=5, experiment2_epoch_num=6, dataset_name='vindr', vit=True, dinov2=False, image_size=224)
-
-    # main_train_central_2D(global_config_path="/home/soroosh/Documents/Repositories/vit-med/config/config.yaml",
-    #               valid=True, resume=False, augment=True, experiment_name='mimic15k_resnet_ima22k_224_7labels_lr1e4', dataset_name='mimic',
-    #                       pretrained=True, vit=False, dinov2=False, image_size=224, batch_size=128, lr=1e-4)
+    main_train_central_2D(global_config_path="/PATH/config.yaml",
+                  valid=True, resume=False, augment=True, experiment_name='NAME', dataset_name='cxr14',
+                          pretrained=True, vit=False, dinov2=False, image_size=224, batch_size=128, lr=1e-4)

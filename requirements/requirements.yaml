@@ -1,4 +1,4 @@
-name: pytorch2vit
+name: enhancingpaper
 channels:
   - defaults
   - pytorch

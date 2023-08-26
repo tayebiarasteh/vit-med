@@ -70,8 +70,10 @@ class vindr_data_loader_2D(Dataset):
 
         self.file_path_list = list(self.subset_df['image_id'])
 
-        self.chosen_labels = ['Cardiomegaly', 'Pleural effusion', 'Pneumonia', 'Atelectasis', 'No finding', 'Consolidation', 'Pneumothorax', 'Pleural thickening', 'Lung Opacity', 'Pulmonary fibrosis', 'Nodule/Mass'] # all labels (11)
+        # self.chosen_labels = ['Cardiomegaly', 'Pleural effusion', 'Pneumonia', 'Atelectasis', 'No finding', 'Consolidation', 'Pneumothorax', 'Pleural thickening', 'Lung Opacity', 'Pulmonary fibrosis', 'Nodule/Mass'] # all labels (11)
 
+        # using mimic pretraining
+        self.chosen_labels = ['Cardiomegaly', 'Pleural effusion', 'Pneumonia', 'Atelectasis', 'No finding', 'Consolidation', 'Pneumothorax', 'Lung Opacity']
 
 
 
@@ -133,108 +135,6 @@ class vindr_data_loader_2D(Dataset):
 
 
 
-class PediCXR_data_loader_2D(Dataset):
-    """
-    This is the pipeline based on Pytorch's Dataset and Dataloader
-    """
-    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
-        """
-        Parameters
-        ----------
-        cfg_path: str
-            Config file path of the experiment
-
-        mode: str
-            Nature of operation to be done with the data.
-                Possible inputs are train, valid, test
-                Default value: train
-        """
-
-        self.cfg_path = cfg_path
-        self.params = read_config(cfg_path)
-        self.augment = augment
-        self.file_base_dir = self.params['file_path']
-        self.file_base_dir = os.path.join(self.file_base_dir, 'vindr-pcxr')
-        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master_list.csv"), sep=',')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master_list_vindr-pcxr.csv"), sep=',')
-
-        if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
-        elif image_size == 336:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed336')
-        elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
-
-        if mode == 'train':
-            self.subset_df = self.org_df[self.org_df['split'] == 'train']
-            self.file_base_dir = os.path.join(self.file_base_dir, 'train')
-        elif mode == 'valid':
-            self.subset_df = self.org_df[self.org_df['split'] == 'valid']
-            self.file_base_dir = os.path.join(self.file_base_dir, 'train')
-        elif mode == 'test':
-            self.subset_df = self.org_df[self.org_df['split'] == 'test']
-            self.file_base_dir = os.path.join(self.file_base_dir, 'test')
-
-        self.file_path_list = list(self.subset_df['image_id'])
-
-        self.chosen_labels = ['No finding', 'Pneumonia', 'Bronchiolitis', 'Brocho-pneumonia'] # all labels (4)
-
-
-
-    def __len__(self):
-        """Returns the length of the dataset"""
-        return len(self.file_path_list)
-
-
-    def __getitem__(self, idx):
-        """
-        Parameters
-        ----------
-        idx: int
-
-        Returns
-        -------
-        img: torch tensor
-        label: torch tensor
-        """
-        img = cv2.imread(os.path.join(self.file_base_dir, self.file_path_list[idx] + '.jpg')) # (h, w, d)
-
-        if self.augment:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.RandomHorizontalFlip(p=0.5),
-                                        transforms.RandomRotation(degrees=7), transforms.ToTensor()])
-        else:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])
-        img = trans(img)
-
-        label_df = self.subset_df[self.subset_df['image_id'] == self.file_path_list[idx]]
-        label = torch.zeros((len(self.chosen_labels)))  # (h,)
-
-        for idx in range(len(self.chosen_labels)):
-            label[idx] = int(label_df[self.chosen_labels[idx]].values[0])
-        label = label.float()
-
-        return img, label
-
-
-
-    def pos_weight(self):
-        """
-        Calculates a weight for positive examples for each class and returns it as a tensor
-        Only using the training set.
-        """
-
-        train_df = self.org_df[self.org_df['split'] == 'train']
-        full_length = len(train_df)
-        output_tensor = torch.zeros((len(self.chosen_labels)))
-
-        for idx, diseases in enumerate(self.chosen_labels):
-            disease_length = sum(train_df[diseases].values == 1)
-            output_tensor[idx] = (full_length - disease_length) / (disease_length + epsilon)
-
-        return output_tensor
-
-
-
 class chexpert_data_loader_2D(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
@@ -269,7 +169,7 @@ class chexpert_data_loader_2D(Dataset):
         self.subset_df = self.subset_df[self.subset_df['view'] == 'Frontal']
         self.file_path_list = list(self.subset_df['jpg_rel_path'])
 
-        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'lung_opacity', 'lung_lesion', 'enlarged_cardiomediastinum', 'edema', 'fracture'] # most labels (12)
+        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'lung_opacity', 'lung_lesion', 'fracture'] # most labels (10)
 
 
 
@@ -384,7 +284,17 @@ class mimic_data_loader_2D(Dataset):
         self.subset_df = PAview.append(APview)
         self.file_path_list = list(self.subset_df['jpg_rel_path'])
 
-        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'lung_opacity', 'lung_lesion', 'enlarged_cardiomediastinum', 'edema', 'fracture'] # most labels (12)
+        # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'lung_opacity', 'lung_lesion', 'fracture'] # most labels (10)
+
+
+        # for vindr pretraining
+        # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'lung_opacity']
+
+        # for UKA pretraining
+        # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding']
+
+        # for cxr14 & padchest pretraining
+        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax']
 
 
 
@@ -499,8 +409,11 @@ class UKA_data_loader_2D(Dataset):
 
         self.file_path_list = list(self.subset_df['image_id'])
 
-        self.chosen_labels = ['cardiomegaly', 'congestion', 'pleural_effusion_right', 'pleural_effusion_left', 'pneumonic_infiltrates_right',
-                              'pneumonic_infiltrates_left', 'atelectasis_right', 'atelectasis_left', 'healthy'] # 9 labels
+        # self.chosen_labels = ['cardiomegaly', 'congestion', 'pleural_effusion_right', 'pleural_effusion_left', 'pneumonic_infiltrates_right',
+        #                       'pneumonic_infiltrates_left', 'atelectasis_right', 'atelectasis_left', 'healthy'] # 9 labels
+
+        # using mimic pretraining
+        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonic_infiltrates', 'atelectasis', 'healthy']
 
 
 
@@ -541,6 +454,21 @@ class UKA_data_loader_2D(Dataset):
                     label[idx] = 1
                 elif int(label_df[self.chosen_labels[idx]].values[0]) == 0:
                     label[idx] = 0
+            elif self.chosen_labels[idx] == 'pleural_effusion':
+                if int(label_df[self.chosen_labels[idx]].values[0]) == 1:
+                    label[idx] = 1
+                elif int(label_df[self.chosen_labels[idx]].values[0]) == 0:
+                    label[idx] = 0
+            elif self.chosen_labels[idx] == 'atelectasis':
+                if int(label_df[self.chosen_labels[idx]].values[0]) == 1:
+                    label[idx] = 1
+                elif int(label_df[self.chosen_labels[idx]].values[0]) == 0:
+                    label[idx] = 0
+            elif self.chosen_labels[idx] == 'pneumonic_infiltrates':
+                if int(label_df[self.chosen_labels[idx]].values[0]) == 1:
+                    label[idx] = 1
+                elif int(label_df[self.chosen_labels[idx]].values[0]) == 0:
+                    label[idx] = 0
             else:
                 if int(label_df[self.chosen_labels[idx]].values[0]) == 3:
                     label[idx] = 1
@@ -568,6 +496,14 @@ class UKA_data_loader_2D(Dataset):
         for idx, diseases in enumerate(self.chosen_labels):
             if diseases == 'healthy':
                 disease_length = sum(train_df['healthy'].values == 1)
+            elif diseases == 'pleural_effusion':
+                disease_length = sum(train_df['pleural_effusion'].values == 1)
+            elif diseases == 'atelectasis':
+                disease_length = sum(train_df['atelectasis'].values == 1)
+            elif diseases == 'pneumonic_infiltrates':
+                disease_length = sum(train_df['pneumonic_infiltrates'].values == 1)
+            elif diseases == 'pneumonia':
+                disease_length = sum(train_df['pneumonic_infiltrates'].values == 1)
             else:
                 disease_length = sum(train_df[diseases].values == 3)
                 disease_length += sum(train_df[diseases].values == 4)
@@ -618,9 +554,10 @@ class cxr14_data_loader_2D(Dataset):
 
         self.file_path_list = list(self.subset_df['img_rel_path'])
 
-        self.chosen_labels = ['cardiomegaly', 'effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'fibrosis', 'emphysema', 'hernia', 'pleural_thickening', 'edema', 'nodule', 'mass'] # all labels (14)
+        # self.chosen_labels = ['cardiomegaly', 'effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'fibrosis', 'emphysema', 'hernia', 'pleural_thickening', 'edema', 'nodule', 'mass'] # all labels (14)
 
-
+        # using mimic pretraining
+        self.chosen_labels = ['cardiomegaly', 'effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax']
 
 
 
@@ -728,7 +665,10 @@ class padchest_data_loader_2D(Dataset):
         self.subset_df = self.subset_df.append(APhorizview)
         self.file_path_list = list(self.subset_df['ImageID'])
 
-        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'emphysema', 'hernia', 'scoliosis', 'congestion', 'air_trapping', 'aortic_elongation', 'kyphosis', 'COPD_signs', 'pleural_thickening', 'nodule_mass', 'infiltrates'] # most labels (18)
+        # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'emphysema', 'hernia', 'scoliosis', 'congestion', 'aortic_elongation', 'kyphosis', 'COPD_signs', 'pleural_thickening', 'nodule_mass', 'infiltrates'] # most labels (17)
+
+        # using mimic pretraining
+        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax']
 
 
     def __len__(self):

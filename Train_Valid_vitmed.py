@@ -1,6 +1,6 @@
 """
 Created on May 4, 2023.
-main_vitmed.py
+Train_Valid_vitmed.py
 
 @author: Soroosh Tayebi Arasteh <soroosh.arasteh@rwth-aachen.de>
 https://github.com/tayebiarasteh/
@@ -130,8 +130,6 @@ class Training:
         self.optimiser = optimiser
 
         # Saves the model, optimiser,loss function name for writing to config file
-        # self.model_info['model'] = model.__name__
-        # self.model_info['optimiser'] = optimiser.__name__
         self.model_info['total_param_num'] = total_param_num
         self.model_info['loss_function'] = loss_function.__name__
         self.params['Network'] = self.model_info
@@ -522,7 +520,7 @@ class Training:
             # self.writer.add_scalar('Valid_loss', valid_loss, self.epoch)
             # self.writer.add_scalar('valid_avg_F1', valid_F1.mean(), self.epoch)
             self.writer.add_scalar('Valid_avg_AUC', valid_AUC.mean(), self.epoch)
-            self.writer.add_scalar('Valid_pneumonia_AUC', valid_AUC[2], self.epoch)
+            # self.writer.add_scalar('Valid_pneumonia_AUC', valid_AUC[2], self.epoch)
 
             # for idx, pathology in enumerate(self.label_names):
             #     self.writer.add_scalar('valid_F1_' + pathology, valid_F1[idx], self.epoch)
