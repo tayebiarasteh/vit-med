@@ -6,7 +6,7 @@ Overview
 
 * This is the official repository of the paper [**Enhancing Network Initialization for Medical AI Models Using Large-Scale, Unlabeled Natural Images**](https://arxiv.org/abs/2308.07688).
 * Pre-print version: [https://arxiv.org/abs/2308.07688](https://arxiv.org/abs/2308.07688)
-
+* Update: We have released our fine-tuned network weights for research purposes. Check [this link](https://www.dropbox.com/scl/fi/6da3721irzs4swhhjlffi/networks.zip?rlkey=7r1wokvofq5gl5eaykyxvif0k&dl=0)! (Size: 1.6 GB)
 
 Abstract
 ------
