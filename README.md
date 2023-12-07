@@ -1,11 +1,10 @@
-# Enhancing Network Initialization for Medical AI Models Using Large-Scale, Unlabeled Natural Images
+# Enhancing diagnostic deep learning via self-supervised pretraining on large-scale, unlabeled non-medical images
 
 
 Overview
 ------
 
-* This is the official repository of the paper [**Enhancing Network Initialization for Medical AI Models Using Large-Scale, Unlabeled Natural Images**](https://arxiv.org/abs/2308.07688).
-* Pre-print version: [https://arxiv.org/abs/2308.07688](https://arxiv.org/abs/2308.07688)
+* This is the official repository of the paper [**Enhancing diagnostic deep learning via self-supervised pretraining on large-scale, unlabeled non-medical images**](https://doi.org/10.1186/s41747-023-00411-3).
 * Update: We have released our fine-tuned network weights for research purposes. Check [this link](https://www.dropbox.com/scl/fi/6da3721irzs4swhhjlffi/networks.zip?rlkey=7r1wokvofq5gl5eaykyxvif0k&dl=0)! (Size: 1.6 GB)
 
 Abstract
@@ -47,16 +46,16 @@ Our source code for training and evaluation of the deep neural networks, image a
 ------
 ### In case you use this repository, please cite the original paper:
 
-S. Tayebi Arasteh et al. *Enhancing Network Initialization for Medical AI Models Using Large-Scale, Unlabeled Natural Images*. arxiv.2308.07688, https://doi.org/10.48550/arXiv.2308.07688, 2023.
+S. Tayebi Arasteh et al. *Enhancing diagnostic deep learning via self-supervised pretraining on large-scale, unlabeled non-medical images*. European Radiology Experimental, https://doi.org/10.1186/s41747-023-00411-3, 2023.
 
 ### BibTex
 
     @article {enhancingarasteh,
       author = {Tayebi Arasteh, Soroosh and Misera, Leo and Kather, Jakob Nikolas and Truhn, Daniel and Nebelung, Sven},
-      title = {Enhancing Network Initialization for Medical AI Models Using Large-Scale, Unlabeled Natural Images},
+      title = {Enhancing diagnostic deep learning via self-supervised pretraining on large-scale, unlabeled non-medical images},
       year = {2023},
-      doi = {10.48550/arXiv.2308.07688},
-      publisher = {arXiv},
-      URL = {https://arxiv.org/abs/2308.07688},
-      journal = {arXiv}
+      doi = {10.1186/s41747-023-00411-3},
+      publisher = {Springer},
+      URL = {https://doi.org/10.1186/s41747-023-00411-3},
+      journal = {European Radiology Experimental}
     }
