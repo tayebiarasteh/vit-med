@@ -46,7 +46,7 @@ Our source code for training and evaluation of the deep neural networks, image a
 ------
 ### In case you use this repository, please cite the original paper:
 
-S. Tayebi Arasteh et al. *Enhancing diagnostic deep learning via self-supervised pretraining on large-scale, unlabeled non-medical images*. European Radiology Experimental, https://doi.org/10.1186/s41747-023-00411-3, 2024.
+S. Tayebi Arasteh, L. Misera, J.N. Kather  et al. *Enhancing diagnostic deep learning via self-supervised pretraining on large-scale, unlabeled non-medical images*. Eur Radiol Exp 8, 10 (2024). https://doi.org/10.1186/s41747-023-00411-3.
 
 ### BibTex
 
@@ -54,6 +54,8 @@ S. Tayebi Arasteh et al. *Enhancing diagnostic deep learning via self-supervised
       author = {Tayebi Arasteh, Soroosh and Misera, Leo and Kather, Jakob Nikolas and Truhn, Daniel and Nebelung, Sven},
       title = {Enhancing diagnostic deep learning via self-supervised pretraining on large-scale, unlabeled non-medical images},
       year = {2024},
+      volume = {8},
+      number = {10},
       doi = {10.1186/s41747-023-00411-3},
       publisher = {Springer},
       URL = {https://doi.org/10.1186/s41747-023-00411-3},
