@@ -1,52 +1,74 @@
-# Enhancing diagnostic deep learning via self-supervised pretraining on large-scale, unlabeled non-medical images
+# Self-supervised and supervised pretraining for chest radiograph AI
+
+## Papers in this repository
+
+1) **Enhancing diagnostic deep learning via self-supervised pretraining on large-scale, unlabeled non-medical images**  
+European Radiology Experimental, 2024.  
+DOI: https://doi.org/10.1186/s41747-023-00411-3
+
+2) **High-resolution self-supervised learning with DINOv3 advances chest radiograph analysis**
 
 
-Overview
-------
+## Prerequisites
 
-* This is the official repository of the paper [**Enhancing diagnostic deep learning via self-supervised pretraining on large-scale, unlabeled non-medical images**](https://doi.org/10.1186/s41747-023-00411-3).
-* Update: We have released our fine-tuned network weights for research purposes. Check [this link](https://www.dropbox.com/scl/fi/6da3721irzs4swhhjlffi/networks.zip?rlkey=7r1wokvofq5gl5eaykyxvif0k&dl=0)! (Size: 1.6 GB)
+The software is developed in **Python 3.9**. For deep learning, the **PyTorch 2.8** framework is used.
 
-Abstract
-------
-Pre-training datasets, like ImageNet, have become the gold standard in medical image analysis. However, the emergence of self-supervised learning (SSL), which leverages unlabeled data to learn robust features, presents an opportunity to bypass the intensive labeling process. In this study, we explored if SSL for pre-training on non-medical images can be applied to chest radiographs and how it compares to supervised pre-training on non-medical images and on medical images. We utilized a vision transformer and initialized its weights based on (i) SSL pre-training on natural images (DINOv2), (ii) SL pre-training on natural images (ImageNet dataset), and (iii) SL pre-training on chest radiographs from the MIMIC-CXR database. We tested our approach on over 800,000 chest radiographs from six large global datasets, diagnosing more than 20 different imaging findings. Our SSL pre-training on curated images not only outperformed ImageNet-based pre-training (P<0.001 for all datasets) but, in certain cases, also exceeded SL on the MIMIC-CXR dataset. Our findings suggest that selecting the right pre-training strategy, especially with SSL, can be pivotal for improving artificial intelligence (AI)'s diagnostic accuracy in medical imaging. By demonstrating the promise of SSL in chest radiograph analysis, we underline a transformative shift towards more efficient and accurate AI models in medical imaging.
-
-
-### Prerequisites
-
-The software is developed in **Python 3.9**. For the deep learning, the **PyTorch 2.0** framework is used.
-
-
-
-Main Python modules required for the software can be installed from ./requirements:
+Main Python modules required for the software can be installed from `./requirements.yaml`:
 
 ```
 $ conda env create -f requirements.yaml
-$ conda activate enhancingpaper
+$ conda activate vitmed
 ```
 
 **Note:** This might take a few minutes.
 
 
-Code structure
 ---
 
-Our source code for training and evaluation of the deep neural networks, image analysis and preprocessing, and data augmentation are available here.
+## Model initializations used
 
-1. Everything can be run from *./main_vitmed.py*. 
-* The data preprocessing parameters, directories, hyper-parameters, and model parameters can be modified from *./configs/config.yaml*.
-* Also, you should first choose an `experiment` name (if you are starting a new experiment) for training, in which all the evaluation and loss value statistics, tensorboard events, and model & checkpoints will be stored. Furthermore, a `config.yaml` file will be created for each experiment storing all the information needed.
-* For testing, just load the experiment which its model you need.
+**ImageNet (supervised):**
+- ViT-B/16 (via timm): `vit_base_patch16_224_in21k`  
+  https://github.com/huggingface/pytorch-image-models
 
-2. The rest of the files:
-* *./data/* directory contains all the data preprocessing, augmentation, and loading files.
-* *./Train_Valid_vitmed.py* contains the training and validation processes.
-* *./Prediction_vitmed.py* all the prediction and testing processes.
+**DINOv2 (self-supervised):**
+- ViT-B/16: https://huggingface.co/facebook/dinov2-base
 
-------
-### In case you use this repository, please cite the original paper:
+**DINOv3 (self-supervised):**
+- ViT-B/16: https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m  
+- ConvNeXt-B: https://huggingface.co/facebook/dinov3-convnext-base-pretrain-lvd1689m  
+- ViT-7B/16 (frozen features): https://huggingface.co/facebook/dinov3-vit7b16-pretrain-lvd1689m  
+  *(ConvNeXt DINOv3 weights were loaded from SafeTensors.)*
 
-S. Tayebi Arasteh, L. Misera, J.N. Kather  et al. *Enhancing diagnostic deep learning via self-supervised pretraining on large-scale, unlabeled non-medical images*. Eur Radiol Exp 8, 10 (2024). https://doi.org/10.1186/s41747-023-00411-3.
+---
+
+## Code structure
+
+- `main_vitmed.py` — single entry point for training/evaluation.  
+- `configs/config.yaml` — edit data paths, preprocessing, model/backbone, initialization (ImageNet / DINOv2 / DINOv3), resolution (224 / 512), optimizer and schedule.  
+- `data/` — dataset I/O, preprocessing, augmentation.  
+- `Train_Valid_vitmed.py` — training / validation loops.  
+- `Prediction_vitmed.py` — inference & metrics.
+
+---
+
+## Quickstart
+
+1) Prepare datasets following the paths and splits in `configs/config.yaml`.  
+2) Choose an `experiment` name; the script will create a folder with checkpoints, metrics, TensorBoard logs, and a copy of the effective config.  
+3) Launch training/evaluation from the project root, e.g.
+
+```
+python main_vitmed.py --config ./configs/config.yaml --experiment dinov3_convnext_512
+```
+
+## In case you use this repository, please cite the original paper:
+
+If you use this code, please cite **both** papers:
+
+**Paper 1**  
+
+S. Tayebi Arasteh, L. Misera, J.N. Kather, D. Truhn, S. Nebelung. *Enhancing diagnostic deep learning via self-supervised pretraining on large-scale, unlabeled non-medical images*. European Radiology Experimental 8, 10 (2024). https://doi.org/10.1186/s41747-023-00411-3
 
 ### BibTex
 
@@ -61,3 +83,16 @@ S. Tayebi Arasteh, L. Misera, J.N. Kather  et al. *Enhancing diagnostic deep lea
       URL = {https://doi.org/10.1186/s41747-023-00411-3},
       journal = {European Radiology Experimental}
     }
+
+**Paper 2**
+
+S. Tayebi Arasteh, et al. High-resolution self-supervised learning with DINOv3 advances chest radiograph analysis. 2025.
+
+```bibtex
+@article{dinov3_cxr_2025,
+  author  = {Tayebi Arasteh, Soroosh and others},
+  title   = {High-resolution self-supervised learning with DINOv3 advances chest radiograph analysis},
+  year    = {2025},
+  doi     = {},
+  url     = {}
+}
