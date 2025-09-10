@@ -57,7 +57,7 @@ class Prediction:
         self.model.load_state_dict(torch.load(os.path.join(self.params['target_dir'], self.params['network_output_path']) + "epoch" + str(epoch_num) + "_" + model_file_name))
 
 
-    def predict_only(self, test_loader):
+    def predict_only(self, test_loader, vit_imgnet=True, vit_dino=True, convnext=True):
         """Evaluation with metrics epoch
         """
         self.model.eval()
@@ -73,7 +73,17 @@ class Prediction:
             label = label.float()
 
             with torch.no_grad():
-                output = self.model(image)
+                if vit_imgnet:
+                    output = self.model(image)  # for ViT imagenet
+
+                elif vit_dino:
+                    output = self.model(image)
+                    output = self.model.head(output.last_hidden_state.mean(dim=1)) # for ViT dinov2 and v3
+
+                elif convnext:
+                    output = self.model(image)
+                    output = self.model.head(output.pooler_output)  # for convnext (both dino & imagnet)
+
 
                 output_sigmoided = F.sigmoid(output)
 
@@ -82,6 +92,8 @@ class Prediction:
                 labels_cache = torch.cat((labels_cache, label))
 
         return preds_with_sigmoid_cache, labels_cache
+
+
 
 
 
@@ -180,6 +192,14 @@ class Prediction:
         return average_f1_score, average_AUROC, average_accuracy, average_specificity, average_sensitivity, average_precision
 
 
+
+    def ci95(self, x, axis=0):
+        """Return 2.5 and 97.5 percentiles along axis."""
+        lo, hi = np.percentile(x, [2.5, 97.5], axis=axis)
+        return lo, hi
+
+
+
     def bootstrapper(self, preds_with_sigmoid, targets, index_list, testsetname):
         self.model.eval()
         AUC_list = []
@@ -254,73 +274,152 @@ class Prediction:
         sensitivity_list = np.stack(sensitivity_list)
         F1_list = np.stack(F1_list)
 
+        # Per-class (individual) CIs (shape: n_classes)
+        auc_lo, auc_hi = self.ci95(AUC_list, axis=0)
+        acc_lo, acc_hi = self.ci95(accuracy_list, axis=0)
+        spec_lo, spec_hi = self.ci95(specificity_list, axis=0)
+        sens_lo, sens_hi = self.ci95(sensitivity_list, axis=0)
+        f1_lo, f1_hi = self.ci95(F1_list, axis=0)
+
+        # Macro “average” per bootstrap (first average across classes, then CI across bootstraps)
+        AUC_avg_per_bs = AUC_list.mean(axis=1)  # shape: (n_bootstraps,)
+        ACC_avg_per_bs = accuracy_list.mean(axis=1)
+        SPEC_avg_per_bs = specificity_list.mean(axis=1)
+        SENS_avg_per_bs = sensitivity_list.mean(axis=1)
+        F1_avg_per_bs = F1_list.mean(axis=1)
+
+        AUC_avg_lo, AUC_avg_hi = self.ci95(AUC_avg_per_bs, axis=0)
+        ACC_avg_lo, ACC_avg_hi = self.ci95(ACC_avg_per_bs, axis=0)
+        SPEC_avg_lo, SPEC_avg_hi = self.ci95(SPEC_avg_per_bs, axis=0)
+        SENS_avg_lo, SENS_avg_hi = self.ci95(SENS_avg_per_bs, axis=0)
+        F1_avg_lo, F1_avg_hi = self.ci95(F1_avg_per_bs, axis=0)
+
         print('------------------------------------------------------'
               '----------------------------------')
         print('\t experiment:' + self.params['experiment_name'] + '\n')
 
-        print(f'\t avg AUROC: {AUC_list.mean() * 100:.2f} ± {AUC_list.std() * 100:.2f}% | avg accuracy: {accuracy_list.mean() * 100:.2f} ± {accuracy_list.std() * 100:.2f}%'
-              f' | avg specificity: {specificity_list.mean() * 100:.2f} ± {specificity_list.std() * 100:.2f}'
-              f' | avg recall (sensitivity): {sensitivity_list.mean() * 100:.2f}% ± {sensitivity_list.std() * 100:.2f}% | avg F1: {F1_list.mean() * 100:.2f} ± {F1_list.std() * 100:.2f}%\n')
+        print(
+            f"\t avg AUROC: {AUC_avg_per_bs.mean() * 100:.2f} ± {AUC_avg_per_bs.std() * 100:.2f} "
+            f"[95% CI: {AUC_avg_lo * 100:.2f}, {AUC_avg_hi * 100:.2f}] | "
+            f"avg accuracy: {ACC_avg_per_bs.mean() * 100:.2f} ± {ACC_avg_per_bs.std() * 100:.2f} "
+            f"[95% CI: {ACC_avg_lo * 100:.2f}, {ACC_avg_hi * 100:.2f}] | "
+            f"avg specificity: {SPEC_avg_per_bs.mean() * 100:.2f} ± {SPEC_avg_per_bs.std() * 100:.2f} "
+            f"[95% CI: {SPEC_avg_lo * 100:.2f}, {SPEC_avg_hi * 100:.2f}] | "
+            f"avg recall (sensitivity): {SENS_avg_per_bs.mean() * 100:.2f} ± {SENS_avg_per_bs.std() * 100:.2f} "
+            f"[95% CI: {SENS_avg_lo * 100:.2f}, {SENS_avg_hi * 100:.2f}] | "
+            f"avg F1: {F1_avg_per_bs.mean() * 100:.2f} ± {F1_avg_per_bs.std() * 100:.2f} "
+            f"[95% CI: {F1_avg_lo * 100:.2f}, {F1_avg_hi * 100:.2f}]\n"
+        )
 
         print('Individual AUROC:')
         for idx, pathology in enumerate(self.label_names):
-            print(f'\t{pathology}: {AUC_list[:, idx].mean() * 100:.2f} ± {AUC_list[:, idx].std() * 100:.2f}')
+            mean, std = AUC_list[:, idx].mean(), AUC_list[:, idx].std()
+            print(f"\t{pathology}: {mean * 100:.2f} ± {std * 100:.2f} "
+                  f"[95% CI: {auc_lo[idx] * 100:.2f}, {auc_hi[idx] * 100:.2f}]")
 
         print('\nIndividual accuracy:')
         for idx, pathology in enumerate(self.label_names):
-            print(f'\t{pathology}: {accuracy_list[:, idx].mean() * 100:.2f} ± {accuracy_list[:, idx].std() * 100:.2f}')
+            mean, std = accuracy_list[:, idx].mean(), accuracy_list[:, idx].std()
+            print(f"\t{pathology}: {mean * 100:.2f} ± {std * 100:.2f} "
+                  f"[95% CI: {acc_lo[idx] * 100:.2f}, {acc_hi[idx] * 100:.2f}]")
 
         print('\nIndividual sensitivity:')
         for idx, pathology in enumerate(self.label_names):
-            print(f'\t{pathology}: {sensitivity_list[:, idx].mean() * 100:.2f} ± {sensitivity_list[:, idx].std() * 100:.2f}')
+            mean, std = sensitivity_list[:, idx].mean(), sensitivity_list[:, idx].std()
+            print(f"\t{pathology}: {mean * 100:.2f} ± {std * 100:.2f} "
+                  f"[95% CI: {sens_lo[idx] * 100:.2f}, {sens_hi[idx] * 100:.2f}]")
 
         print('\nIndividual specificity:')
         for idx, pathology in enumerate(self.label_names):
-            print(f'\t{pathology}: {specificity_list[:, idx].mean() * 100:.2f} ± {specificity_list[:, idx].std() * 100:.2f}')
+            mean, std = specificity_list[:, idx].mean(), specificity_list[:, idx].std()
+            print(f"\t{pathology}: {mean * 100:.2f} ± {std * 100:.2f} "
+                  f"[95% CI: {spec_lo[idx] * 100:.2f}, {spec_hi[idx] * 100:.2f}]")
 
         print('------------------------------------------------------'
               '----------------------------------')
 
         # saving the stats
-        msg = f'\n\n----------------------------------------------------------------------------------------\n' \
-              '\t experiment:' + self.params['experiment_name'] + '\n\n' \
-              f'avg AUROC: {AUC_list.mean() * 100:.2f} ± {AUC_list.std() * 100:.2f}% | avg accuracy: {accuracy_list.mean() * 100:.2f} ± {accuracy_list.std() * 100:.2f}% ' \
-              f' | avg specificity: {specificity_list.mean() * 100:.2f} ± {specificity_list.std() * 100:.2f}%' \
-              f' | avg recall (sensitivity): {sensitivity_list.mean() * 100:.2f} ± {sensitivity_list.std() * 100:.2f}% | avg F1: {F1_list.mean() * 100:.2f} ± {F1_list.std() * 100:.2f}%\n\n'
+        msg = (
+            f'\n\n----------------------------------------------------------------------------------------\n'
+            f'\t experiment:{self.params["experiment_name"]}\n\n'
+            f'avg AUROC: {AUC_avg_per_bs.mean() * 100:.2f} ± {AUC_avg_per_bs.std() * 100:.2f} '
+            f'[95% CI: {AUC_avg_lo * 100:.2f}, {AUC_avg_hi * 100:.2f}] | '
+            f'avg accuracy: {ACC_avg_per_bs.mean() * 100:.2f} ± {ACC_avg_per_bs.std() * 100:.2f} '
+            f'[95% CI: {ACC_avg_lo * 100:.2f}, {ACC_avg_hi * 100:.2f}] | '
+            f'avg specificity: {SPEC_avg_per_bs.mean() * 100:.2f} ± {SPEC_avg_per_bs.std() * 100:.2f} '
+            f'[95% CI: {SPEC_avg_lo * 100:.2f}, {SPEC_avg_hi * 100:.2f}] | '
+            f'avg recall (sensitivity): {SENS_avg_per_bs.mean() * 100:.2f} ± {SENS_avg_per_bs.std() * 100:.2f} '
+            f'[95% CI: {SENS_avg_lo * 100:.2f}, {SENS_avg_hi * 100:.2f}] | '
+            f'avg F1: {F1_avg_per_bs.mean() * 100:.2f} ± {F1_avg_per_bs.std() * 100:.2f} '
+            f'[95% CI: {F1_avg_lo * 100:.2f}, {F1_avg_hi * 100:.2f}]\n\n'
+        )
 
         with open(os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(testsetname), 'a') as f:
+            f.write(msg)
+
+        # saving the stats
+        msg = (
+            f'\n\n----------------------------------------------------------------------------------------\n'
+            f'\t experiment:{self.params["experiment_name"]}\n\n'
+            f'avg AUROC: {AUC_avg_per_bs.mean() * 100:.2f} ± {AUC_avg_per_bs.std() * 100:.2f} '
+            f'[95% CI: {AUC_avg_lo * 100:.2f}, {AUC_avg_hi * 100:.2f}] | '
+            f'avg accuracy: {ACC_avg_per_bs.mean() * 100:.2f} ± {ACC_avg_per_bs.std() * 100:.2f} '
+            f'[95% CI: {ACC_avg_lo * 100:.2f}, {ACC_avg_hi * 100:.2f}] | '
+            f'avg specificity: {SPEC_avg_per_bs.mean() * 100:.2f} ± {SPEC_avg_per_bs.std() * 100:.2f} '
+            f'[95% CI: {SPEC_avg_lo * 100:.2f}, {SPEC_avg_hi * 100:.2f}] | '
+            f'avg recall (sensitivity): {SENS_avg_per_bs.mean() * 100:.2f} ± {SENS_avg_per_bs.std() * 100:.2f} '
+            f'[95% CI: {SENS_avg_lo * 100:.2f}, {SENS_avg_hi * 100:.2f}] | '
+            f'avg F1: {F1_avg_per_bs.mean() * 100:.2f} ± {F1_avg_per_bs.std() * 100:.2f} '
+            f'[95% CI: {F1_avg_lo * 100:.2f}, {F1_avg_hi * 100:.2f}]\n\n'
+        )
+
+        with open(
+                os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(testsetname),
+                'a') as f:
             f.write(msg)
 
         msg = f'Individual AUROC:\n'
-        with open(os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(testsetname), 'a') as f:
+        with open(
+                os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(testsetname),
+                'a') as f:
             f.write(msg)
         for idx, pathology in enumerate(self.label_names):
-            msg = f'{pathology}: {AUC_list[:, idx].mean() * 100:.2f} ± {AUC_list[:, idx].std() * 100:.2f}% | '
-            with open(os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(testsetname), 'a') as f:
+            msg = f'{pathology}: {AUC_list[:, idx].mean() * 100:.2f} ± {AUC_list[:, idx].std() * 100:.2f} [95% CI: {auc_lo[idx] * 100:.2f}, {auc_hi[idx] * 100:.2f}] | '
+            with open(os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(
+                    testsetname), 'a') as f:
                 f.write(msg)
 
         msg = f'\n\nIndividual accuracy:\n'
-        with open(os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(testsetname), 'a') as f:
+        with open(
+                os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(testsetname),
+                'a') as f:
             f.write(msg)
         for idx, pathology in enumerate(self.label_names):
-            msg = f'{pathology}: {accuracy_list[:, idx].mean() * 100:.2f} ± {accuracy_list[:, idx].std() * 100:.2f}% | '
-            with open(os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(testsetname), 'a') as f:
+            msg = f'{pathology}: {accuracy_list[:, idx].mean() * 100:.2f} ± {accuracy_list[:, idx].std() * 100:.2f} [95% CI: {acc_lo[idx] * 100:.2f}, {acc_hi[idx] * 100:.2f}] | '
+            with open(os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(
+                    testsetname), 'a') as f:
                 f.write(msg)
 
         msg = f'\n\nIndividual sensitivity:\n'
-        with open(os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(testsetname), 'a') as f:
+        with open(
+                os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(testsetname),
+                'a') as f:
             f.write(msg)
         for idx, pathology in enumerate(self.label_names):
-            msg = f'{pathology}: {sensitivity_list[:, idx].mean() * 100:.2f} ± {sensitivity_list[:, idx].std() * 100:.2f}% | '
-            with open(os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(testsetname), 'a') as f:
+            msg = f'{pathology}: {sensitivity_list[:, idx].mean() * 100:.2f} ± {sensitivity_list[:, idx].std() * 100:.2f} [95% CI: {sens_lo[idx] * 100:.2f}, {sens_hi[idx] * 100:.2f}] | '
+            with open(os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(
+                    testsetname), 'a') as f:
                 f.write(msg)
 
         msg = f'\n\nIndividual specificity:\n'
-        with open(os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(testsetname), 'a') as f:
+        with open(
+                os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(testsetname),
+                'a') as f:
             f.write(msg)
         for idx, pathology in enumerate(self.label_names):
-            msg = f'{pathology}: {specificity_list[:, idx].mean() * 100:.2f} ± {specificity_list[:, idx].std() * 100:.2f}% | '
-            with open(os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(testsetname), 'a') as f:
+            msg = f'{pathology}: {specificity_list[:, idx].mean() * 100:.2f} ± {specificity_list[:, idx].std() * 100:.2f} [95% CI: {spec_lo[idx] * 100:.2f}, {spec_hi[idx] * 100:.2f}] | '
+            with open(os.path.join(self.params['target_dir'], self.params['stat_log_path']) + '/Test_on_' + str(
+                    testsetname), 'a') as f:
                 f.write(msg)
 
         df = pd.DataFrame(AUC_list.mean(1), columns=['AUC_mean'])

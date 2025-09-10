@@ -123,7 +123,6 @@ class Training:
         print('----------------------------------------------------\n')
 
         self.model = model.to(self.device)
-        # self.model = self.model.half() # float16
 
         self.loss_weight = weight.to(self.device)
         self.loss_function = loss_function(pos_weight=self.loss_weight)
@@ -198,7 +197,10 @@ class Training:
 
                 with torch.set_grad_enabled(True):
 
-                    output = self.model(image)
+                    output = self.model(image)  # for ViT imagenet
+                    # output = self.model.head(output.last_hidden_state.mean(dim=1)) # for ViT dinov2 and v3
+                    # output = self.model.head(output.pooler_output)  # for convnext (both dino & imagnet)
+
                     loss = self.loss_function(output, label) # for multilabel
 
                     loss.backward()
@@ -274,7 +276,9 @@ class Training:
             label = label.to(self.device)
 
             with torch.no_grad():
-                output = self.model(image)
+                output = self.model(image) # for ViT imagenet
+                # output = self.model.head(output.last_hidden_state.mean(dim=1)) # for ViT dinov2 and v3
+                # output = self.model.head(output.pooler_output) # for convnext (both dino & imagnet)
 
                 output_sigmoided = F.sigmoid(output)
 

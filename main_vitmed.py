@@ -15,11 +15,20 @@ from torchvision import transforms, models
 import timm
 import numpy as np
 from sklearn import metrics
+# from mne.stats import fdr_correction
+import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve, auc
+from transformers import AutoImageProcessor, AutoModel
 
 from config.serde import open_experiment, create_experiment, delete_experiment, write_config
 from Train_Valid_vitmed import Training
 from Prediction_vitmed import Prediction
-from data.data_provider import vindr_data_loader_2D, chexpert_data_loader_2D, mimic_data_loader_2D, cxr14_data_loader_2D, padchest_data_loader_2D
+from data.data_provider import vindr_data_loader_2D, chexpert_data_loader_2D, mimic_data_loader_2D, UKA_data_loader_2D, cxr14_data_loader_2D, padchest_data_loader_2D, pedicxr_data_loader_2D
+from data.feature_data_provider import vindr_feat_loader, padchest_feat_loader, cxr14_feat_loader, chexpert_feat_loader, pedicxr_feat_loader, mimic_feat_loader, UKA_feat_loader
+from models.dinonet import DinoNet
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -27,14 +36,14 @@ warnings.filterwarnings('ignore')
 
 
 
-def main_train_central_2D(global_config_path="/PATH/config.yaml", valid=False,
-                  resume=False, augment=False, experiment_name='name', dataset_name='vindr', pretrained=False, vit=False, dinov2=True, image_size=224, batch_size=30, lr=1e-5):
+def main_train_central_2D(global_config_path="/PATH/vit-med/config/config.yaml", valid=False,
+                  resume=False, augment=False, experiment_name='name', dataset_name='vindr', pretrained=False, vit=False, dino=True, image_size=224, batch_size=30, lr=1e-5):
     """Main function for training + validation centrally
 
         Parameters
         ----------
         global_config_path: str
-            always global_config_path="/PATH/config.yaml"
+            always global_config_path="/PATH/vit-med/config/config.yaml"
 
         valid: bool
             if we want to do validation
@@ -64,12 +73,18 @@ def main_train_central_2D(global_config_path="/PATH/config.yaml", valid=False,
     elif dataset_name == 'mimic':
         train_dataset = mimic_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
         valid_dataset = mimic_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'UKA':
+        train_dataset = UKA_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = UKA_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'cxr14':
         train_dataset = cxr14_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
         valid_dataset = cxr14_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'padchest':
         train_dataset = padchest_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
         valid_dataset = padchest_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'pedi':
+        train_dataset = pedicxr_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = pedicxr_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
 
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size,
                                                pin_memory=True, drop_last=True, shuffle=True, num_workers=10)
@@ -84,8 +99,30 @@ def main_train_central_2D(global_config_path="/PATH/config.yaml", valid=False,
 
     # Changeable network parameters
     if vit:
-        if dinov2:
-            model = load_pretrained_dinov2(num_classes=len(weight))
+        if dino:
+
+            #dinov3 and v2 models
+            # model = AutoModel.from_pretrained(
+                # "facebook/dinov3-vit7b16-pretrain-lvd1689m",
+                # "facebook/dinov3-vitb16-pretrain-lvd1689m",
+                # "facebook/dinov2-base",
+                # torch_dtype=torch.float16,
+                # device_map="auto",
+                # attn_implementation="sdpa"
+            # )
+            # model.head = torch.nn.Linear(in_features=4096, out_features=len(weight))
+            # model.head = torch.nn.Linear(in_features=768, out_features=len(weight), dtype=torch.float16)
+            # model.head = torch.nn.Linear(in_features=768, out_features=len(weight))
+
+
+            # convnext model
+            model = AutoModel.from_pretrained(
+                "facebook/dinov3-convnext-base-pretrain-lvd1689m",     # dinov3
+                # "facebook/convnext-base-224-22k", # imagenet
+                use_safetensors=True
+            )
+            model.head = torch.nn.Linear(in_features=1024, out_features=len(weight))
+
         else:
             model = load_pretrained_timm_model(num_classes=len(weight), pretrained=pretrained, imgsize=image_size)
     else:
@@ -108,6 +145,7 @@ def main_train_central_2D(global_config_path="/PATH/config.yaml", valid=False,
                                      amsgrad=params['Network']['amsgrad'])
 
     trainer = Training(cfg_path, resume=resume, label_names=label_names)
+
     if resume == True:
         trainer.load_checkpoint(model=model, optimiser=optimizer, loss_function=loss_function, weight=weight, label_names=label_names)
     else:
@@ -116,9 +154,117 @@ def main_train_central_2D(global_config_path="/PATH/config.yaml", valid=False,
 
 
 
-def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/PATH/config.yaml",
+def main_test_bootstrap(global_config_path="/PATH/vit-med/config/config.yaml",
+                                                 experiment_name='central_exp_for_test', experiment_epoch_num=100,
+                        dataset_name='vindr', vit_imgnet=True, vit_dino2=True, vit_dino3=True, convnext_imgnet=True, convnext_dino3=True, image_size=224):
+    """Main function for multi label prediction
+
+    Parameters
+    ----------
+    experiment_name: str
+        name of the experiment to be loaded.
+    """
+    params = open_experiment(experiment_name, global_config_path)
+    cfg_path = params['cfg_path']
+
+    if dataset_name == 'vindr':
+        test_dataset = vindr_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'chexpert':
+        test_dataset = chexpert_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'mimic':
+        test_dataset = mimic_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'UKA':
+        test_dataset = UKA_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'cxr14':
+        test_dataset = cxr14_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'padchest':
+        test_dataset = padchest_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'pedi':
+        test_dataset = pedicxr_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    weight = test_dataset.pos_weight()
+    label_names = test_dataset.chosen_labels
+
+
+    if vit_dino2:
+        model = AutoModel.from_pretrained(
+            "facebook/dinov2-base",
+            attn_implementation="sdpa"
+        )
+        model.head = torch.nn.Linear(in_features=768, out_features=len(weight))
+
+    elif vit_dino3:
+        model = AutoModel.from_pretrained(
+            "facebook/dinov3-vitb16-pretrain-lvd1689m",
+            attn_implementation="sdpa"
+        )
+        model.head = torch.nn.Linear(in_features=768, out_features=len(weight))
+
+    elif vit_imgnet:
+        model = load_pretrained_timm_model(num_classes=len(weight), pretrained=True, imgsize=image_size)
+
+    elif convnext_imgnet:
+        model = AutoModel.from_pretrained(
+            "facebook/convnext-base-224-22k",  # imagenet
+            use_safetensors=True
+        )
+        model.head = torch.nn.Linear(in_features=1024, out_features=len(weight))
+
+    elif convnext_dino3:
+        model = AutoModel.from_pretrained(
+            "facebook/dinov3-convnext-base-pretrain-lvd1689m",     # dinov3
+            use_safetensors=True
+        )
+        model.head = torch.nn.Linear(in_features=1024, out_features=len(weight))
+
+
+
+    test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=params['Network']['batch_size'],
+                                               pin_memory=True, drop_last=False, shuffle=False, num_workers=16)
+
+    index_list = []
+    for counter in range(1000):
+        index_list.append(np.random.choice(len(test_dataset), len(test_dataset)))
+
+    if vit_dino2:
+        vit_dino = True
+    elif vit_dino3:
+        vit_dino = True
+    else:
+        vit_dino = False
+
+    if convnext_imgnet:
+        convnext = True
+    elif convnext_dino3:
+        convnext = True
+    else:
+        convnext = False
+
+    # Initialize prediction
+    predictor = Prediction(cfg_path, label_names)
+    predictor.setup_model(model=model, epoch_num=experiment_epoch_num)
+    pred_array, target_array = predictor.predict_only(test_loader, vit_imgnet=vit_imgnet, vit_dino=vit_dino, convnext=convnext)
+
+    #########################################
+    pred_array = pred_array.cpu().numpy()
+    target_array = target_array.int().cpu().numpy()
+
+    df = pd.DataFrame(pred_array.mean(1), columns=['probability_mean'])
+    for idx in range(pred_array.shape[-1]):
+        df.insert(idx + 1, 'prob_' + label_names[idx], pred_array[:, idx])
+        df.insert(idx + 1, 'gt_' + label_names[idx], target_array[:, idx])
+    df.to_csv(os.path.join(params['target_dir'], params['stat_log_path']) + '/predictions_teston_' + str(
+        dataset_name) + '.csv', sep=',', index=False)
+
+    AUC_list = predictor.bootstrapper(pred_array, target_array, index_list, dataset_name)
+
+
+
+
+
+
+def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/PATH/vit-med/config/config.yaml",
                                                  experiment_name1='central_exp_for_test', experiment_name2='central_exp_for_test',
-                                                 experiment1_epoch_num=100, experiment2_epoch_num=100, dataset_name='vindr', vit_1=False, vit_2=False, dinov2_1=False, dinov2_2=False, image_size=224):
+                                                 experiment1_epoch_num=100, experiment2_epoch_num=100, dataset_name='vindr', vit_1=False, vit_2=False, dino_1=False, dino_2=False, image_size=224):
     """Main function for multi label prediction
 
     Parameters
@@ -135,17 +281,29 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/PATH/confi
         test_dataset = chexpert_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'mimic':
         test_dataset = mimic_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'UKA':
+        test_dataset = UKA_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'cxr14':
         test_dataset = cxr14_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'padchest':
         test_dataset = padchest_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'pedi':
+        test_dataset = pedicxr_data_loader_2D(cfg_path=cfg_path1, mode='test', augment=False, image_size=image_size)
     weight = test_dataset.pos_weight()
     label_names = test_dataset.chosen_labels
 
     # Changeable network parameters for the global network
     if vit_1:
-        if dinov2_1:
-            model1 = load_pretrained_dinov2(num_classes=len(weight))
+        if dino_1:
+            model1 = AutoModel.from_pretrained(
+                # "facebook/dinov3-vitb16-pretrain-lvd1689m",
+                "facebook/dinov2-base",
+                # torch_dtype=torch.float16,
+                # device_map="auto",
+                attn_implementation="sdpa"
+            )
+            model1.head = torch.nn.Linear(in_features=768, out_features=len(weight))
+
         else:
             model1 = load_pretrained_timm_model(num_classes=len(weight), imgsize=image_size)
     else:
@@ -161,13 +319,38 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/PATH/confi
     # Initialize prediction 1
     predictor1 = Prediction(cfg_path1, label_names)
     predictor1.setup_model(model=model1, epoch_num=experiment1_epoch_num)
-    pred_array1, target_array1 = predictor1.predict_only(test_loader)
+    pred_array1, target_array1 = predictor1.predict_only(test_loader, dino=True)
+
+    #########################################
+    pred_array = pred_array1.cpu().numpy()
+    target_array = target_array1.int().cpu().numpy()
+
+    df = pd.DataFrame(pred_array.mean(1), columns=['probability_mean'])
+    for idx in range(pred_array.shape[-1]):
+        df.insert(idx + 1, 'prob_' + label_names[idx], pred_array[:, idx])
+        df.insert(idx + 1, 'gt_' + label_names[idx], target_array[:, idx])
+    df.to_csv(os.path.join(params1['target_dir'], params1['stat_log_path']) + '/predictions_teston_' + str(
+        dataset_name) + '.csv', sep=',', index=False)
+
+    # assert pred_array == 5
+
+    #########################################
+
+
     AUC_list1 = predictor1.bootstrapper(pred_array1.cpu().numpy(), target_array1.int().cpu().numpy(), index_list, dataset_name)
 
     # Changeable network parameters
     if vit_2:
-        if dinov2_2:
-            model2 = load_pretrained_dinov2(num_classes=len(weight))
+        if dino_2:
+            model2 = AutoModel.from_pretrained(
+                "facebook/dinov3-vitb16-pretrain-lvd1689m",
+                # "facebook/dinov2-base",
+                # torch_dtype=torch.float16,
+                # device_map="auto",
+                attn_implementation="sdpa"
+            )
+            model2.head = torch.nn.Linear(in_features=768, out_features=len(weight))
+
         else:
             model2 = load_pretrained_timm_model(num_classes=len(weight), imgsize=image_size)
     else:
@@ -178,7 +361,7 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/PATH/confi
     cfg_path2 = params2['cfg_path']
     predictor2 = Prediction(cfg_path2, label_names)
     predictor2.setup_model(model=model2, epoch_num=experiment2_epoch_num)
-    pred_array2, target_array2 = predictor2.predict_only(test_loader)
+    pred_array2, target_array2 = predictor2.predict_only(test_loader, dino=False)
     AUC_list2 = predictor2.bootstrapper(pred_array2.cpu().numpy(), target_array2.int().cpu().numpy(), index_list, dataset_name)
 
     print('individual labels p-values:\n')
@@ -186,15 +369,11 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/PATH/confi
         counter = AUC_list1[:, idx] > AUC_list2[:, idx]
         ratio1 = (len(counter) - counter.sum()) / len(counter)
 
-        reject_fdr, ratio1 = fdr_correction(ratio1, alpha=0.05, method='indep')
-
         if ratio1 <= 0.05:
             print(f'\t{pathology} p-value: {ratio1}; model 1 significantly higher AUC than model 2')
         else:
             counter = AUC_list2[:, idx] > AUC_list1[:, idx]
             ratio2 = (len(counter) - counter.sum()) / len(counter)
-
-            reject_fdr, ratio2 = fdr_correction(ratio2, alpha=0.05, method='indep')
 
             if ratio2 <= 0.05:
                 print(f'\t{pathology} p-value: {ratio2}; model 2 significantly higher AUC than model 1')
@@ -206,16 +385,11 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/PATH/confi
     avgAUC_list2 = AUC_list2.mean(1)
     counter = avgAUC_list1 > avgAUC_list2
     ratio1 = (len(counter) - counter.sum()) / len(counter)
-
-    reject_fdr, ratio1 = fdr_correction(ratio1, alpha=0.05, method='indep')
-
     if ratio1 <= 0.05:
         print(f'\tp-value: {ratio1}; model 1 significantly higher AUC than model 2 on average')
     else:
         counter = avgAUC_list2 > avgAUC_list1
         ratio2 = (len(counter) - counter.sum()) / len(counter)
-
-        reject_fdr, ratio2 = fdr_correction(ratio2, alpha=0.05, method='indep')
 
         if ratio2 <= 0.05:
             print(f'\tp-value: {ratio2}; model 2 significantly higher AUC than model 1 on average')
@@ -232,15 +406,11 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/PATH/confi
         counter = AUC_list1[:, idx] > AUC_list2[:, idx]
         ratio1 = (len(counter) - counter.sum()) / len(counter)
 
-        reject_fdr, ratio1 = fdr_correction(ratio1, alpha=0.05, method='indep')
-
         if ratio1 <= 0.05:
             msg = f'\t{pathology} p-value: {ratio1}; model 1 significantly higher AUC than model 2'
         else:
             counter = AUC_list2[:, idx] > AUC_list1[:, idx]
             ratio2 = (len(counter) - counter.sum()) / len(counter)
-
-            reject_fdr, ratio2 = fdr_correction(ratio2, alpha=0.05, method='indep')
 
             if ratio2 <= 0.05:
                 msg = f'\t{pathology} p-value: {ratio2}; model 2 significantly higher AUC than model 1'
@@ -263,15 +433,11 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/PATH/confi
     counter = avgAUC_list1 > avgAUC_list2
     ratio1 = (len(counter) - counter.sum()) / len(counter)
 
-    reject_fdr, ratio1 = fdr_correction(ratio1, alpha=0.05, method='indep')
-
     if ratio1 <= 0.05:
         msg = f'\tp-value: {ratio1}; model 1 significantly higher AUC than model 2 on average'
     else:
         counter = avgAUC_list2 > avgAUC_list1
         ratio2 = (len(counter) - counter.sum()) / len(counter)
-
-        reject_fdr, ratio2 = fdr_correction(ratio2, alpha=0.05, method='indep')
 
         if ratio2 <= 0.05:
             msg = f'\tp-value: {ratio2}; model 2 significantly higher AUC than model 1 on average'
@@ -287,28 +453,13 @@ def main_test_central_2D_pvalue_out_of_bootstrap(global_config_path="/PATH/confi
 
 def load_pretrained_timm_model(num_classes=2, model_name='vit_base_patch16_224_in21k', pretrained=False, imgsize=512):
     # Load a pre-trained model from config file
-    pdb.set_trace()
     if model_name == 'resnet50d':
+    # if model_name == 'densenet121':
         model = timm.create_model(model_name, num_classes=num_classes, pretrained=pretrained)
 
     else:
         model = timm.create_model(model_name, num_classes=num_classes, img_size=imgsize, pretrained=pretrained)
 
-    model.load_state_dict(torch.load('/PATH/mimicpretraining_224.pth'))
-
-    for param in model.parameters():
-        param.requires_grad = True
-
-    return model
-
-
-
-def load_pretrained_dinov2(num_classes=2):
-    # Load a pre-trained model from config file
-
-    model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14')
-    model.head = torch.nn.Linear(in_features=768, out_features=num_classes)
-
     for param in model.parameters():
         param.requires_grad = True
 
@@ -317,11 +468,63 @@ def load_pretrained_dinov2(num_classes=2):
 
 
 
+def main_train_after_feature(global_config_path="/PATH/vit-med/config/config.yaml", valid=False,
+                  resume=False, experiment_name='name', dataset_name='vindr', image_size=224, batch_size=30, lr=1e-5):
+    if resume == True:
+        params = open_experiment(experiment_name, global_config_path)
+    else:
+        params = create_experiment(experiment_name, global_config_path)
+    cfg_path = params["cfg_path"]
 
+    if dataset_name == 'vindr':
+        train_dataset = vindr_feat_loader(cfg_path=cfg_path, mode='train', image_size=image_size)
+        valid_dataset = vindr_feat_loader(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'chexpert':
+        train_dataset = chexpert_feat_loader(cfg_path=cfg_path, mode='train', image_size=image_size)
+        valid_dataset = chexpert_feat_loader(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'mimic':
+        train_dataset = mimic_feat_loader(cfg_path=cfg_path, mode='train', image_size=image_size)
+        valid_dataset = mimic_feat_loader(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'UKA':
+        train_dataset = UKA_feat_loader(cfg_path=cfg_path, mode='train', image_size=image_size)
+        valid_dataset = UKA_feat_loader(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'cxr14':
+        train_dataset = cxr14_feat_loader(cfg_path=cfg_path, mode='train', image_size=image_size)
+        valid_dataset = cxr14_feat_loader(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'padchest':
+        train_dataset = padchest_feat_loader(cfg_path=cfg_path, mode='train', image_size=image_size)
+        valid_dataset = padchest_feat_loader(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'pedi':
+        train_dataset = pedicxr_feat_loader(cfg_path=cfg_path, mode='train', image_size=image_size)
+        valid_dataset = pedicxr_feat_loader(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
 
+    train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size,
+                                               pin_memory=True, drop_last=True, shuffle=True, num_workers=10)
+    weight = train_dataset.pos_weight()
+    label_names = train_dataset.chosen_labels
 
+    if valid:
+        valid_loader = torch.utils.data.DataLoader(dataset=valid_dataset, batch_size=batch_size,
+                                                   pin_memory=True, drop_last=False, shuffle=False, num_workers=5)
+    else:
+        valid_loader = None
 
-if __name__ == '__main__':
-    main_train_central_2D(global_config_path="/PATH/config.yaml",
-                  valid=True, resume=False, augment=True, experiment_name='NAME', dataset_name='cxr14',
-                          pretrained=True, vit=False, dinov2=False, image_size=224, batch_size=128, lr=1e-4)
+    model = DinoNet(out_features=len(weight))
+
+    loss_function = BCEWithLogitsLoss
+
+    model_info = params['Network']
+    model_info['lr'] = lr
+    model_info['batch_size'] = batch_size
+    params['Network'] = model_info
+    write_config(params, cfg_path, sort_keys=True)
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=float(lr),
+                                  weight_decay=float(params['Network']['weight_decay']))
+
+    trainer = Training(cfg_path, resume=resume, label_names=label_names)
+    if resume == True:
+        trainer.load_checkpoint(model=model, optimiser=optimizer, loss_function=loss_function, weight=weight, label_names=label_names)
+    else:
+        trainer.setup_model(model=model, optimiser=optimizer, loss_function=loss_function, weight=weight)
+    trainer.train_epoch(train_loader=train_loader, valid_loader=valid_loader, num_epochs=params['Network']['num_epochs'])

@@ -1,6 +1,6 @@
 """
-Created on Feb 1, 2022.
-data_provider.py
+Created on Aug 26, 2025.
+feature_data_provider.py
 
 @author: Soroosh Tayebi Arasteh <soroosh.arasteh@rwth-aachen.de>
 https://github.com/tayebiarasteh/
@@ -26,22 +26,11 @@ epsilon = 1e-15
 
 
 
-class vindr_data_loader_2D(Dataset):
+class vindr_feat_loader(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
     def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
-        """
-        Parameters
-        ----------
-        cfg_path: str
-            Config file path of the experiment
-
-        mode: str
-            Nature of operation to be done with the data.
-                Possible inputs are train, valid, test
-                Default value: train
-        """
 
         self.cfg_path = cfg_path
         self.params = read_config(cfg_path)
@@ -58,11 +47,11 @@ class vindr_data_loader_2D(Dataset):
         self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master.csv"), sep=',')
 
         if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
+            self.file_base_dir = os.path.join(self.file_base_dir, 'dinov3_feats_preprocessed224')
         elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
+            self.file_base_dir = os.path.join(self.file_base_dir, 'dinov3_feats_preprocessed512')
         elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed1024')
+            self.file_base_dir = os.path.join(self.file_base_dir, 'dinov3_feats_preprocessed1024')
 
         if mode == 'train':
             self.subset_df = self.org_df[self.org_df['split'] == 'train']
@@ -96,14 +85,7 @@ class vindr_data_loader_2D(Dataset):
         img: torch tensor
         label: torch tensor
         """
-        img = cv2.imread(os.path.join(self.file_base_dir, self.file_path_list[idx] + '.jpg')) # (h, w, d)
-
-        if self.augment:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.RandomHorizontalFlip(p=0.5),
-                                        transforms.RandomRotation(degrees=7), transforms.ToTensor()])
-        else:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])
-        img = trans(img)
+        img = torch.load(os.path.join(self.file_base_dir, self.file_path_list[idx] + '.pt'), map_location='cpu') # (h)
 
         label_df = self.subset_df[self.subset_df['image_id'] == self.file_path_list[idx]]
         label = torch.zeros((len(self.chosen_labels)))  # (h,)
@@ -134,7 +116,7 @@ class vindr_data_loader_2D(Dataset):
 
 
 
-class chexpert_data_loader_2D(Dataset):
+class padchest_feat_loader(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
@@ -151,6 +133,201 @@ class chexpert_data_loader_2D(Dataset):
                 Default value: train
         """
 
+        self.cfg_path = cfg_path
+        self.params = read_config(cfg_path)
+        self.augment = augment
+        self.file_base_dir = self.params['file_path']
+        if image_size == 224:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_224')
+        elif image_size == 512:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_512')
+        elif image_size == 1024:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_1024')
+
+        self.file_base_dir = os.path.join(self.file_base_dir, 'padchest')
+        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master.csv"), sep=',')
+
+        if image_size == 224:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'dinov3_feats_preprocessed224')
+        elif image_size == 512:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'dinov3_feats_preprocessed512')
+        elif image_size == 1024:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'dinov3_feats_preprocessed1024')
+
+        if mode == 'train':
+            self.subset_df = self.org_df[self.org_df['split'] == 'train']
+        elif mode == 'valid':
+            self.subset_df = self.org_df[self.org_df['split'] == 'valid']
+        elif mode == 'test':
+            self.subset_df = self.org_df[self.org_df['split'] == 'test']
+
+        PAview = self.subset_df[self.subset_df['view'] == 'PA']
+        APview = self.subset_df[self.subset_df['view'] == 'AP']
+        APhorizview = self.subset_df[self.subset_df['view'] == 'AP_horizontal']
+
+        self.subset_df = pd.concat([PAview, APview, APhorizview], ignore_index=True)
+
+        self.file_path_list = list(self.subset_df['ImageID'])
+
+        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'emphysema', 'hernia', 'scoliosis', 'congestion', 'aortic_elongation', 'kyphosis', 'COPD_signs', 'pleural_thickening', 'nodule_mass', 'infiltrates'] # most labels (17)
+
+
+
+    def __len__(self):
+        """Returns the length of the dataset"""
+        return len(self.file_path_list)
+
+
+    def __getitem__(self, idx):
+        """
+        Parameters
+        ----------
+        idx: int
+
+        Returns
+        -------
+        img: torch tensor
+        label: torch tensor
+        """
+        subset = self.subset_df[self.subset_df['ImageID'] == self.file_path_list[idx]]['ImageDir'].values[0]
+        impath = os.path.join(self.file_base_dir, str(subset), self.file_path_list[idx])
+        impath = impath.replace('.png', '.pt')
+        img = torch.load(impath, map_location='cpu') # (h)
+
+        label_df = self.subset_df[self.subset_df['ImageID'] == self.file_path_list[idx]]
+        label = torch.zeros((len(self.chosen_labels)))  # (h,)
+
+        for idx in range(len(self.chosen_labels)):
+            label[idx] = int(label_df[self.chosen_labels[idx]].values[0])
+        label = label.float()
+
+        return img, label
+
+
+
+    def pos_weight(self):
+        """
+        Calculates a weight for positive examples for each class and returns it as a tensor
+        Only using the training set.
+        """
+
+        train_df = self.org_df[self.org_df['split'] == 'train']
+        full_length = len(train_df)
+        output_tensor = torch.zeros((len(self.chosen_labels)))
+
+        for idx, diseases in enumerate(self.chosen_labels):
+            disease_length = sum(train_df[diseases].values == 1)
+            output_tensor[idx] = (full_length - disease_length) / (disease_length + epsilon)
+
+        return output_tensor
+
+
+
+class cxr14_feat_loader(Dataset):
+    """
+    This is the pipeline based on Pytorch's Dataset and Dataloader
+    """
+    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
+        """
+        Parameters
+        ----------
+        cfg_path: str
+            Config file path of the experiment
+
+        mode: str
+            Nature of operation to be done with the data.
+                Possible inputs are train, valid, test
+                Default value: train
+        """
+
+        self.cfg_path = cfg_path
+        self.params = read_config(cfg_path)
+        self.augment = augment
+        self.file_base_dir = self.params['file_path']
+        if image_size == 224:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_224')
+        elif image_size == 512:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_512')
+        elif image_size == 1024:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_1024')
+
+        self.file_base_dir = os.path.join(self.file_base_dir, 'NIH_ChestX-ray14')
+        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master.csv"), sep=',')
+
+        if image_size == 224:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'CXR14', 'dinov3_feats_preprocessed224')
+        elif image_size == 512:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'CXR14', 'dinov3_feats_preprocessed512')
+        elif image_size == 1024:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'CXR14', 'dinov3_feats_preprocessed1024')
+
+        if mode == 'train':
+            self.subset_df = self.org_df[self.org_df['split'] == 'train']
+        elif mode == 'valid':
+            self.subset_df = self.org_df[self.org_df['split'] == 'valid']
+        elif mode == 'test':
+            self.subset_df = self.org_df[self.org_df['split'] == 'test']
+
+        self.file_path_list = list(self.subset_df['img_rel_path'])
+
+        self.chosen_labels = ['cardiomegaly', 'effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'fibrosis', 'emphysema', 'hernia', 'pleural_thickening', 'edema', 'nodule', 'mass'] # all labels (14)
+
+
+
+    def __len__(self):
+        """Returns the length of the dataset"""
+        return len(self.file_path_list)
+
+
+    def __getitem__(self, idx):
+        """
+        Parameters
+        ----------
+        idx: int
+
+        Returns
+        -------
+        img: torch tensor
+        label: torch tensor
+        """
+        impath = os.path.join(self.file_base_dir, self.file_path_list[idx])
+        impath = impath.replace('.png', '.pt')
+        img = torch.load(impath, map_location='cpu') # (h)
+
+        label_df = self.subset_df[self.subset_df['img_rel_path'] == self.file_path_list[idx]]
+        label = torch.zeros((len(self.chosen_labels)))  # (h,)
+
+        for idx in range(len(self.chosen_labels)):
+            label[idx] = int(label_df[self.chosen_labels[idx]].values[0])
+        label = label.float()
+
+        return img, label
+
+
+
+    def pos_weight(self):
+        """
+        Calculates a weight for positive examples for each class and returns it as a tensor
+        Only using the training set.
+        """
+
+        train_df = self.org_df[self.org_df['split'] == 'train']
+        full_length = len(train_df)
+        output_tensor = torch.zeros((len(self.chosen_labels)))
+
+        for idx, diseases in enumerate(self.chosen_labels):
+            disease_length = sum(train_df[diseases].values == 1)
+            output_tensor[idx] = (full_length - disease_length) / (disease_length + epsilon)
+
+        return output_tensor
+
+
+
+class chexpert_feat_loader(Dataset):
+    """
+    This is the pipeline based on Pytorch's Dataset and Dataloader
+    """
+    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
         self.cfg_path = cfg_path
         self.params = read_config(cfg_path)
         self.augment = augment
@@ -180,8 +357,6 @@ class chexpert_data_loader_2D(Dataset):
 
 
 
-
-
     def __len__(self):
         """Returns the length of the dataset"""
         return len(self.file_path_list)
@@ -200,20 +375,14 @@ class chexpert_data_loader_2D(Dataset):
         """
         img_path = os.path.join(self.file_base_dir, self.file_path_list[idx])
         if self.image_size == 224:
-            img_path = img_path.replace("/CheXpert-v1.0/", "/CheXpert-v1.0/preprocessed224/")
+            img_path = img_path.replace("/CheXpert-v1.0/", "/CheXpert-v1.0/dinov3_feats_preprocessed224/")
         elif self.image_size == 512:
-            img_path = img_path.replace("/CheXpert-v1.0/", "/CheXpert-v1.0/preprocessed/")
+            img_path = img_path.replace("/CheXpert-v1.0/", "/CheXpert-v1.0/dinov3_feats_preprocessed512/")
         elif self.image_size == 1024:
-            img_path = img_path.replace("/CheXpert-v1.0/", "/CheXpert-v1.0/preprocessed1024/")
+            img_path = img_path.replace("/CheXpert-v1.0/", "/CheXpert-v1.0/dinov3_feats_preprocessed1024/")
 
-        img = cv2.imread(img_path) # (h, w, d)
-
-        if self.augment:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.RandomHorizontalFlip(p=0.5),
-                                        transforms.RandomRotation(degrees=7), transforms.ToTensor()])
-        else:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])
-        img = trans(img)
+        impath = img_path.replace('.jpg', '.pt')
+        img = torch.load(impath, map_location='cpu') # (h)
 
         label_df = self.subset_df[self.subset_df['jpg_rel_path'] == self.file_path_list[idx]]
         label = np.zeros((len(self.chosen_labels)))  # (h,)
@@ -249,7 +418,87 @@ class chexpert_data_loader_2D(Dataset):
 
 
 
-class mimic_data_loader_2D(Dataset):
+class pedicxr_feat_loader(Dataset):
+    """
+    This is the pipeline based on Pytorch's Dataset and Dataloader
+    """
+    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
+
+        self.cfg_path = cfg_path
+        self.params = read_config(cfg_path)
+        self.augment = augment
+        self.file_base_dir = self.params['file_path']
+        if image_size == 224:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_224')
+        elif image_size == 512:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_512')
+        elif image_size == 1024:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_1024')
+
+        self.file_base_dir = os.path.join(self.file_base_dir, 'vindr-pcxr')
+        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master.csv"), sep=',')
+
+        if image_size == 224:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'dinov3_feats_preprocessed224')
+        elif image_size == 512:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'dinov3_feats_preprocessed512')
+        elif image_size == 1024:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'dinov3_feats_preprocessed1024')
+
+        if mode == 'train':
+            self.subset_df = self.org_df[self.org_df['split'] == 'train']
+            self.file_base_dir = os.path.join(self.file_base_dir, 'train')
+        elif mode == 'valid':
+            self.subset_df = self.org_df[self.org_df['split'] == 'valid']
+            self.file_base_dir = os.path.join(self.file_base_dir, 'train')
+        elif mode == 'test':
+            self.subset_df = self.org_df[self.org_df['split'] == 'test']
+            self.file_base_dir = os.path.join(self.file_base_dir, 'test')
+
+        self.file_path_list = list(self.subset_df['image_id'])
+
+        self.chosen_labels = ['No finding', 'Pneumonia', 'Bronchitis/Bronchiolitis']
+
+
+
+    def __len__(self):
+        """Returns the length of the dataset"""
+        return len(self.file_path_list)
+
+
+    def __getitem__(self, idx):
+        img = torch.load(os.path.join(self.file_base_dir, self.file_path_list[idx] + '.pt'), map_location='cpu') # (h)
+
+        label_df = self.subset_df[self.subset_df['image_id'] == self.file_path_list[idx]]
+        label = torch.zeros((len(self.chosen_labels)))  # (h,)
+
+        for idx in range(len(self.chosen_labels)):
+            label[idx] = int(label_df[self.chosen_labels[idx]].values[0])
+        label = label.float()
+
+        return img, label
+
+
+
+    def pos_weight(self):
+        """
+        Calculates a weight for positive examples for each class and returns it as a tensor
+        Only using the training set.
+        """
+
+        train_df = self.org_df[self.org_df['split'] == 'train']
+        full_length = len(train_df)
+        output_tensor = torch.zeros((len(self.chosen_labels)))
+
+        for idx, diseases in enumerate(self.chosen_labels):
+            disease_length = sum(train_df[diseases].values == 1)
+            output_tensor[idx] = (full_length - disease_length) / (disease_length + epsilon)
+
+        return output_tensor
+
+
+
+class mimic_feat_loader(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
@@ -317,19 +566,14 @@ class mimic_data_loader_2D(Dataset):
         img_path = os.path.join(self.file_base_dir, self.file_path_list[idx])
 
         if self.image_size == 224:
-            img_path = img_path.replace("/files/", "/preprocessed224/")
+            img_path = img_path.replace("/files/", "/dinov3_feats_preprocessed224/")
         elif self.image_size == 512:
-            img_path = img_path.replace("/files/", "/preprocessed/")
+            img_path = img_path.replace("/files/", "/dinov3_feats_preprocessed512/")
         elif self.image_size == 1024:
-            img_path = img_path.replace("/files/", "/preprocessed1024/")
-        img = cv2.imread(img_path) # (h, w, d)
+            img_path = img_path.replace("/files/", "/dinov3_feats_preprocessed1024/")
+        impath = img_path.replace('.jpg', '.pt')
+        img = torch.load(impath, map_location='cpu') # (h)
 
-        if self.augment:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.RandomHorizontalFlip(p=0.5),
-                                        transforms.RandomRotation(degrees=7), transforms.ToTensor()])
-        else:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])
-        img = trans(img)
 
         label_df = self.subset_df[self.subset_df['jpg_rel_path'] == self.file_path_list[idx]]
         label = np.zeros((len(self.chosen_labels)))  # (h,)
@@ -365,7 +609,7 @@ class mimic_data_loader_2D(Dataset):
 
 
 
-class UKA_data_loader_2D(Dataset):
+class UKA_feat_loader(Dataset):
     """
     This is the pipeline based on Pytorch's Dataset and Dataloader
     """
@@ -398,16 +642,18 @@ class UKA_data_loader_2D(Dataset):
             self.subset_df = self.org_df[self.org_df['split'] == 'test']
 
         if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
+            self.file_base_dir = os.path.join(self.file_base_dir, 'dinov3_feats_preprocessed224')
         elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
+            self.file_base_dir = os.path.join(self.file_base_dir, 'dinov3_feats_preprocessed512')
         elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed1024')
+            self.file_base_dir = os.path.join(self.file_base_dir, 'dinov3_feats_preprocessed1024')
 
         self.file_path_list = list(self.subset_df['image_id'])
 
         # 6 labels
         self.chosen_labels = ['cardiomegaly', 'congestion', 'pleural_effusion', 'pneumonic_infiltrates', 'atelectasis', 'healthy']
+
+
 
 
     def __len__(self):
@@ -427,14 +673,7 @@ class UKA_data_loader_2D(Dataset):
         label: torch tensor
         """
         subset = self.subset_df[self.subset_df['image_id'] == self.file_path_list[idx]]['subset'].values[0]
-        img = cv2.imread(os.path.join(self.file_base_dir, subset, str(self.file_path_list[idx]) + '.jpg')) # (h, w, d)
-
-        if self.augment:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.RandomHorizontalFlip(p=0.5),
-                                        transforms.RandomRotation(degrees=7), transforms.ToTensor()])
-        else:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])
-        img = trans(img)
+        img = torch.load(os.path.join(self.file_base_dir, subset, str(self.file_path_list[idx]) + '.pt'), map_location='cpu') # (h)
 
         label_df = self.subset_df[self.subset_df['image_id'] == self.file_path_list[idx]]
 
@@ -500,328 +739,6 @@ class UKA_data_loader_2D(Dataset):
                 disease_length = sum(train_df[diseases].values == 3)
                 disease_length += sum(train_df[diseases].values == 4)
 
-            output_tensor[idx] = (full_length - disease_length) / (disease_length + epsilon)
-
-        return output_tensor
-
-
-
-class cxr14_data_loader_2D(Dataset):
-    """
-    This is the pipeline based on Pytorch's Dataset and Dataloader
-    """
-    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
-        """
-        Parameters
-        ----------
-        cfg_path: str
-            Config file path of the experiment
-
-        mode: str
-            Nature of operation to be done with the data.
-                Possible inputs are train, valid, test
-                Default value: train
-        """
-
-        self.cfg_path = cfg_path
-        self.params = read_config(cfg_path)
-        self.augment = augment
-        self.file_base_dir = self.params['file_path']
-        if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_224')
-        elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_512')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_1024')
-
-        self.file_base_dir = os.path.join(self.file_base_dir, 'NIH_ChestX-ray14')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master.csv"), sep=',')
-
-        if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'CXR14', 'preprocessed224')
-        elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'CXR14', 'preprocessed')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'CXR14', 'preprocessed1024')
-
-        if mode == 'train':
-            self.subset_df = self.org_df[self.org_df['split'] == 'train']
-        elif mode == 'valid':
-            self.subset_df = self.org_df[self.org_df['split'] == 'valid']
-        elif mode == 'test':
-            self.subset_df = self.org_df[self.org_df['split'] == 'test']
-
-        self.file_path_list = list(self.subset_df['img_rel_path'])
-
-        self.chosen_labels = ['cardiomegaly', 'effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'fibrosis', 'emphysema', 'hernia', 'pleural_thickening', 'edema', 'nodule', 'mass'] # all labels (14)
-
-
-
-    def __len__(self):
-        """Returns the length of the dataset"""
-        return len(self.file_path_list)
-
-
-    def __getitem__(self, idx):
-        """
-        Parameters
-        ----------
-        idx: int
-
-        Returns
-        -------
-        img: torch tensor
-        label: torch tensor
-        """
-        img = cv2.imread(os.path.join(self.file_base_dir, self.file_path_list[idx])) # (h, w, d)
-
-        if self.augment:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.RandomHorizontalFlip(p=0.5),
-                                        transforms.RandomRotation(degrees=7), transforms.ToTensor()])
-        else:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])
-        img = trans(img)
-
-        label_df = self.subset_df[self.subset_df['img_rel_path'] == self.file_path_list[idx]]
-        label = torch.zeros((len(self.chosen_labels)))  # (h,)
-
-        for idx in range(len(self.chosen_labels)):
-            label[idx] = int(label_df[self.chosen_labels[idx]].values[0])
-        label = label.float()
-
-        return img, label
-
-
-
-    def pos_weight(self):
-        """
-        Calculates a weight for positive examples for each class and returns it as a tensor
-        Only using the training set.
-        """
-
-        train_df = self.org_df[self.org_df['split'] == 'train']
-        full_length = len(train_df)
-        output_tensor = torch.zeros((len(self.chosen_labels)))
-
-        for idx, diseases in enumerate(self.chosen_labels):
-            disease_length = sum(train_df[diseases].values == 1)
-            output_tensor[idx] = (full_length - disease_length) / (disease_length + epsilon)
-
-        return output_tensor
-
-
-
-class padchest_data_loader_2D(Dataset):
-    """
-    This is the pipeline based on Pytorch's Dataset and Dataloader
-    """
-    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
-        """
-        Parameters
-        ----------
-        cfg_path: str
-            Config file path of the experiment
-
-        mode: str
-            Nature of operation to be done with the data.
-                Possible inputs are train, valid, test
-                Default value: train
-        """
-
-        self.cfg_path = cfg_path
-        self.params = read_config(cfg_path)
-        self.augment = augment
-        self.file_base_dir = self.params['file_path']
-        if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_224')
-        elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_512')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_1024')
-
-        self.file_base_dir = os.path.join(self.file_base_dir, 'padchest')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master.csv"), sep=',')
-
-        if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
-        elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed1024')
-
-        if mode == 'train':
-            self.subset_df = self.org_df[self.org_df['split'] == 'train']
-        elif mode == 'valid':
-            self.subset_df = self.org_df[self.org_df['split'] == 'valid']
-        elif mode == 'test':
-            self.subset_df = self.org_df[self.org_df['split'] == 'test']
-
-
-        PAview = self.subset_df[self.subset_df['view'] == 'PA']
-        APview = self.subset_df[self.subset_df['view'] == 'AP']
-        APhorizview = self.subset_df[self.subset_df['view'] == 'AP_horizontal']
-        self.subset_df = pd.concat([PAview, APview, APhorizview], ignore_index=True)
-        self.file_path_list = list(self.subset_df['ImageID'])
-
-        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'emphysema', 'hernia', 'scoliosis', 'congestion', 'aortic_elongation', 'kyphosis', 'COPD_signs', 'pleural_thickening', 'nodule_mass', 'infiltrates'] # most labels (17)
-
-
-    def __len__(self):
-        """Returns the length of the dataset"""
-        return len(self.file_path_list)
-
-
-    def __getitem__(self, idx):
-        """
-        Parameters
-        ----------
-        idx: int
-
-        Returns
-        -------
-        img: torch tensor
-        label: torch tensor
-        """
-        subset = self.subset_df[self.subset_df['ImageID'] == self.file_path_list[idx]]['ImageDir'].values[0]
-        img = cv2.imread(os.path.join(self.file_base_dir, str(subset), self.file_path_list[idx])) # (h, w, d)
-
-        if self.augment:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.RandomHorizontalFlip(p=0.5),
-                                        transforms.RandomRotation(degrees=7), transforms.ToTensor()])
-        else:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])
-        img = trans(img)
-
-        label_df = self.subset_df[self.subset_df['ImageID'] == self.file_path_list[idx]]
-        label = torch.zeros((len(self.chosen_labels)))  # (h,)
-
-        for idx in range(len(self.chosen_labels)):
-            label[idx] = int(label_df[self.chosen_labels[idx]].values[0])
-        label = label.float()
-
-        return img, label
-
-
-
-    def pos_weight(self):
-        """
-        Calculates a weight for positive examples for each class and returns it as a tensor
-        Only using the training set.
-        """
-
-        train_df = self.org_df[self.org_df['split'] == 'train']
-        full_length = len(train_df)
-        output_tensor = torch.zeros((len(self.chosen_labels)))
-
-        for idx, diseases in enumerate(self.chosen_labels):
-            disease_length = sum(train_df[diseases].values == 1)
-            output_tensor[idx] = (full_length - disease_length) / (disease_length + epsilon)
-
-        return output_tensor
-
-
-
-class pedicxr_data_loader_2D(Dataset):
-    """
-    This is the pipeline based on Pytorch's Dataset and Dataloader
-    """
-    def __init__(self, cfg_path, mode='train', augment=False, image_size=224):
-        """
-        Parameters
-        ----------
-        cfg_path: str
-            Config file path of the experiment
-
-        mode: str
-            Nature of operation to be done with the data.
-                Possible inputs are train, valid, test
-                Default value: train
-        """
-
-        self.cfg_path = cfg_path
-        self.params = read_config(cfg_path)
-        self.augment = augment
-        self.file_base_dir = self.params['file_path']
-        if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_224')
-        elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_512')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_1024')
-
-        self.file_base_dir = os.path.join(self.file_base_dir, 'vindr-pcxr')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master.csv"), sep=',')
-
-        if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
-        elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed1024')
-
-        if mode == 'train':
-            self.subset_df = self.org_df[self.org_df['split'] == 'train']
-            self.file_base_dir = os.path.join(self.file_base_dir, 'train')
-        elif mode == 'valid':
-            self.subset_df = self.org_df[self.org_df['split'] == 'valid']
-            self.file_base_dir = os.path.join(self.file_base_dir, 'train')
-        elif mode == 'test':
-            self.subset_df = self.org_df[self.org_df['split'] == 'test']
-            self.file_base_dir = os.path.join(self.file_base_dir, 'test')
-
-        self.file_path_list = list(self.subset_df['image_id'])
-
-        self.chosen_labels = ['No finding', 'Pneumonia', 'Bronchitis/Bronchiolitis']
-
-
-    def __len__(self):
-        """Returns the length of the dataset"""
-        return len(self.file_path_list)
-
-
-    def __getitem__(self, idx):
-        """
-        Parameters
-        ----------
-        idx: int
-
-        Returns
-        -------
-        img: torch tensor
-        label: torch tensor
-        """
-        img = cv2.imread(os.path.join(self.file_base_dir, self.file_path_list[idx] + '.jpg')) # (h, w, d)
-
-        if self.augment:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.RandomHorizontalFlip(p=0.5),
-                                        transforms.RandomRotation(degrees=7), transforms.ToTensor()])
-        else:
-            trans = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])
-        img = trans(img)
-
-        label_df = self.subset_df[self.subset_df['image_id'] == self.file_path_list[idx]]
-        label = torch.zeros((len(self.chosen_labels)))  # (h,)
-
-        for idx in range(len(self.chosen_labels)):
-            label[idx] = int(label_df[self.chosen_labels[idx]].values[0])
-        label = label.float()
-
-        return img, label
-
-
-
-    def pos_weight(self):
-        """
-        Calculates a weight for positive examples for each class and returns it as a tensor
-        Only using the training set.
-        """
-
-        train_df = self.org_df[self.org_df['split'] == 'train']
-        full_length = len(train_df)
-        output_tensor = torch.zeros((len(self.chosen_labels)))
-
-        for idx, diseases in enumerate(self.chosen_labels):
-            disease_length = sum(train_df[diseases].values == 1)
             output_tensor[idx] = (full_length - disease_length) / (disease_length + epsilon)
 
         return output_tensor
