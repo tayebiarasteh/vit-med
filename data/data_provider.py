@@ -2,7 +2,7 @@
 Created on Feb 1, 2022.
 data_provider.py
 
-@author: Soroosh Tayebi Arasteh <soroosh.arasteh@rwth-aachen.de>
+@author: Soroosh Tayebi Arasteh
 https://github.com/tayebiarasteh/
 """
 
@@ -47,22 +47,16 @@ class vindr_data_loader_2D(Dataset):
         self.params = read_config(cfg_path)
         self.augment = augment
         self.file_base_dir = self.params['file_path']
-        if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_224')
-        elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_512')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_1024')
-
         self.file_base_dir = os.path.join(self.file_base_dir, 'vindr-cxr1')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master.csv"), sep=',')
+        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master_list.csv"), sep=',')
+        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "vindr_officialsoroosh_master_list.csv"), sep=',')
 
         if image_size == 224:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
+        elif image_size == 336:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed336')
         elif image_size == 512:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed1024')
 
         if mode == 'train':
             self.subset_df = self.org_df[self.org_df['split'] == 'train']
@@ -77,6 +71,9 @@ class vindr_data_loader_2D(Dataset):
         self.file_path_list = list(self.subset_df['image_id'])
 
         self.chosen_labels = ['Cardiomegaly', 'Pleural effusion', 'Pneumonia', 'Atelectasis', 'No finding', 'Consolidation', 'Pneumothorax', 'Pleural thickening', 'Lung Opacity', 'Pulmonary fibrosis', 'Nodule/Mass'] # all labels (11)
+
+        # using mimic pretraining
+        # self.chosen_labels = ['Cardiomegaly', 'Pleural effusion', 'Pneumonia', 'Atelectasis', 'No finding', 'Consolidation', 'Pneumothorax', 'Lung Opacity']
 
 
 
@@ -112,6 +109,10 @@ class vindr_data_loader_2D(Dataset):
             label[idx] = int(label_df[self.chosen_labels[idx]].values[0])
         label = label.float()
 
+        # casting to float16
+        # img = img.half()
+        # label = label.half()
+
         return img, label
 
 
@@ -122,7 +123,7 @@ class vindr_data_loader_2D(Dataset):
         Only using the training set.
         """
 
-        train_df = self.org_df[self.org_df['split'] == 'train']
+        train_df = self.subset_df[self.subset_df['split'] == 'train']
         full_length = len(train_df)
         output_tensor = torch.zeros((len(self.chosen_labels)))
 
@@ -156,15 +157,7 @@ class chexpert_data_loader_2D(Dataset):
         self.augment = augment
         self.image_size = image_size
         self.file_base_dir = self.params['file_path']
-
-        if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_224')
-        elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_512')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_1024')
-
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "master.csv"), sep=',')
+        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "CheXpert-v1.0", "chexpert_nothree_master_list_20percenttest.csv"), sep=',')
 
         if mode == 'train':
             self.subset_df = self.org_df[self.org_df['split'] == 'train']
@@ -201,10 +194,10 @@ class chexpert_data_loader_2D(Dataset):
         img_path = os.path.join(self.file_base_dir, self.file_path_list[idx])
         if self.image_size == 224:
             img_path = img_path.replace("/CheXpert-v1.0/", "/CheXpert-v1.0/preprocessed224/")
-        elif self.image_size == 512:
+        elif self.image_size == 336:
+            img_path = img_path.replace("/CheXpert-v1.0/", "/CheXpert-v1.0/preprocessed336/")
+        else:
             img_path = img_path.replace("/CheXpert-v1.0/", "/CheXpert-v1.0/preprocessed/")
-        elif self.image_size == 1024:
-            img_path = img_path.replace("/CheXpert-v1.0/", "/CheXpert-v1.0/preprocessed1024/")
 
         img = cv2.imread(img_path) # (h, w, d)
 
@@ -227,6 +220,10 @@ class chexpert_data_loader_2D(Dataset):
         label = torch.from_numpy(label)  # (h,)
         label = label.float()
 
+        # casting to float16
+        # img = img.half()
+        # label = label.half()
+
         return img, label
 
 
@@ -237,7 +234,7 @@ class chexpert_data_loader_2D(Dataset):
         Only using the training set.
         """
 
-        train_df = self.org_df[self.org_df['split'] == 'train']
+        train_df = self.subset_df[self.subset_df['split'] == 'train']
         full_length = len(train_df)
         output_tensor = torch.zeros((len(self.chosen_labels)))
 
@@ -271,15 +268,9 @@ class mimic_data_loader_2D(Dataset):
         self.image_size = image_size
         self.augment = augment
         self.file_base_dir = self.params['file_path']
-        if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_224')
-        elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_512')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_1024')
-
         self.file_base_dir = os.path.join(self.file_base_dir, "MIMIC")
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master.csv"), sep=',')
+        # self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master_list.csv"), sep=',')
+        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "mimic_nothree_master_list_20percenttest.csv"), sep=',')
 
         if mode == 'train':
             self.subset_df = self.org_df[self.org_df['split'] == 'train']
@@ -290,11 +281,20 @@ class mimic_data_loader_2D(Dataset):
 
         PAview = self.subset_df[self.subset_df['view'] == 'PA']
         APview = self.subset_df[self.subset_df['view'] == 'AP']
-        self.subset_df = pd.concat([PAview, APview], ignore_index=True)
-
+        self.subset_df = PAview.append(APview)
         self.file_path_list = list(self.subset_df['jpg_rel_path'])
 
-        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'lung_opacity', 'lung_lesion', 'fracture'] # most labels (10)
+        # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'lung_opacity', 'lung_lesion', 'fracture'] # most labels (10)
+
+
+        # for vindr pretraining
+        # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'lung_opacity']
+
+        # for UKA pretraining
+        # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding']
+
+        # for cxr14 & padchest pretraining
+        self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax']
 
 
 
@@ -318,10 +318,10 @@ class mimic_data_loader_2D(Dataset):
 
         if self.image_size == 224:
             img_path = img_path.replace("/files/", "/preprocessed224/")
-        elif self.image_size == 512:
+        elif self.image_size == 336:
+            img_path = img_path.replace("/files/", "/preprocessed336/")
+        else:
             img_path = img_path.replace("/files/", "/preprocessed/")
-        elif self.image_size == 1024:
-            img_path = img_path.replace("/files/", "/preprocessed1024/")
         img = cv2.imread(img_path) # (h, w, d)
 
         if self.augment:
@@ -343,6 +343,10 @@ class mimic_data_loader_2D(Dataset):
         label = torch.from_numpy(label)  # (h,)
         label = label.float()
 
+        # casting to float16
+        # img = img.half()
+        # label = label.half()
+
         return img, label
 
 
@@ -353,7 +357,7 @@ class mimic_data_loader_2D(Dataset):
         Only using the training set.
         """
 
-        train_df = self.org_df[self.org_df['split'] == 'train']
+        train_df = self.subset_df[self.subset_df['split'] == 'train']
         full_length = len(train_df)
         output_tensor = torch.zeros((len(self.chosen_labels)))
 
@@ -386,9 +390,8 @@ class UKA_data_loader_2D(Dataset):
         self.params = read_config(cfg_path)
         self.augment = augment
         self.file_base_dir = self.params['file_path']
-
-        self.file_base_dir = os.path.join(self.file_base_dir, 'UKA_CXR')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "labels/master.csv"), sep=',')
+        self.file_base_dir = os.path.join(self.file_base_dir, 'UKA/chest_radiograph')
+        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "labels/UKA_master_list.csv"), sep=',')
 
         if mode == 'train':
             self.subset_df = self.org_df[self.org_df['split'] == 'train']
@@ -398,16 +401,21 @@ class UKA_data_loader_2D(Dataset):
             self.subset_df = self.org_df[self.org_df['split'] == 'test']
 
         if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
+            self.file_base_dir = os.path.join(self.file_base_dir, 'UKA_preprocessed224')
+        elif image_size == 336:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'UKA_preprocessed336')
         elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed1024')
+            self.file_base_dir = os.path.join(self.file_base_dir, 'UKA_preprocessed')
 
         self.file_path_list = list(self.subset_df['image_id'])
 
-        # 6 labels
-        self.chosen_labels = ['cardiomegaly', 'congestion', 'pleural_effusion', 'pneumonic_infiltrates', 'atelectasis', 'healthy']
+        self.chosen_labels = ['cardiomegaly', 'congestion', 'pleural_effusion_right', 'pleural_effusion_left', 'pneumonic_infiltrates_right',
+                              'pneumonic_infiltrates_left', 'atelectasis_right', 'atelectasis_left', 'healthy'] # 9 labels
+
+        # using mimic pretraining
+        # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonic_infiltrates', 'atelectasis', 'healthy']
+
+
 
 
     def __len__(self):
@@ -481,7 +489,7 @@ class UKA_data_loader_2D(Dataset):
         Only using the training set.
         """
 
-        train_df = self.org_df[self.org_df['split'] == 'train']
+        train_df = self.subset_df[self.subset_df['split'] == 'train']
         full_length = len(train_df)
         output_tensor = torch.zeros((len(self.chosen_labels)))
 
@@ -527,22 +535,15 @@ class cxr14_data_loader_2D(Dataset):
         self.params = read_config(cfg_path)
         self.augment = augment
         self.file_base_dir = self.params['file_path']
-        if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_224')
-        elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_512')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_1024')
-
         self.file_base_dir = os.path.join(self.file_base_dir, 'NIH_ChestX-ray14')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master.csv"), sep=',')
+        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "final_cxr14_master_list.csv"), sep=',')
 
         if image_size == 224:
             self.file_base_dir = os.path.join(self.file_base_dir, 'CXR14', 'preprocessed224')
-        elif image_size == 512:
+        elif image_size == 336:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'CXR14', 'preprocessed336')
+        else:
             self.file_base_dir = os.path.join(self.file_base_dir, 'CXR14', 'preprocessed')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'CXR14', 'preprocessed1024')
 
         if mode == 'train':
             self.subset_df = self.org_df[self.org_df['split'] == 'train']
@@ -554,6 +555,9 @@ class cxr14_data_loader_2D(Dataset):
         self.file_path_list = list(self.subset_df['img_rel_path'])
 
         self.chosen_labels = ['cardiomegaly', 'effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'fibrosis', 'emphysema', 'hernia', 'pleural_thickening', 'edema', 'nodule', 'mass'] # all labels (14)
+
+        # using mimic pretraining
+        # self.chosen_labels = ['cardiomegaly', 'effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax']
 
 
 
@@ -589,6 +593,10 @@ class cxr14_data_loader_2D(Dataset):
             label[idx] = int(label_df[self.chosen_labels[idx]].values[0])
         label = label.float()
 
+        # casting to float16
+        # img = img.half()
+        # label = label.half()
+
         return img, label
 
 
@@ -599,7 +607,7 @@ class cxr14_data_loader_2D(Dataset):
         Only using the training set.
         """
 
-        train_df = self.org_df[self.org_df['split'] == 'train']
+        train_df = self.subset_df[self.subset_df['split'] == 'train']
         full_length = len(train_df)
         output_tensor = torch.zeros((len(self.chosen_labels)))
 
@@ -608,7 +616,6 @@ class cxr14_data_loader_2D(Dataset):
             output_tensor[idx] = (full_length - disease_length) / (disease_length + epsilon)
 
         return output_tensor
-
 
 
 class padchest_data_loader_2D(Dataset):
@@ -632,22 +639,17 @@ class padchest_data_loader_2D(Dataset):
         self.params = read_config(cfg_path)
         self.augment = augment
         self.file_base_dir = self.params['file_path']
-        if image_size == 224:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_224')
-        elif image_size == 512:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_512')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_1024')
-
         self.file_base_dir = os.path.join(self.file_base_dir, 'padchest')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master.csv"), sep=',')
+        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "padchest_master_list_20percenttest.csv"), sep=',')
 
         if image_size == 224:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
-        elif image_size == 512:
+        elif image_size == 336:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed336')
+        elif image_size == 504:
+            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed504')
+        else:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed')
-        elif image_size == 1024:
-            self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed1024')
 
         if mode == 'train':
             self.subset_df = self.org_df[self.org_df['split'] == 'train']
@@ -656,14 +658,17 @@ class padchest_data_loader_2D(Dataset):
         elif mode == 'test':
             self.subset_df = self.org_df[self.org_df['split'] == 'test']
 
-
         PAview = self.subset_df[self.subset_df['view'] == 'PA']
         APview = self.subset_df[self.subset_df['view'] == 'AP']
         APhorizview = self.subset_df[self.subset_df['view'] == 'AP_horizontal']
-        self.subset_df = pd.concat([PAview, APview, APhorizview], ignore_index=True)
+        self.subset_df = PAview.append(APview)
+        self.subset_df = self.subset_df.append(APhorizview)
         self.file_path_list = list(self.subset_df['ImageID'])
 
         self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax', 'emphysema', 'hernia', 'scoliosis', 'congestion', 'aortic_elongation', 'kyphosis', 'COPD_signs', 'pleural_thickening', 'nodule_mass', 'infiltrates'] # most labels (17)
+
+        # using mimic pretraining
+        # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonia', 'atelectasis', 'no_finding', 'consolidation', 'pneumothorax']
 
 
     def __len__(self):
@@ -699,6 +704,10 @@ class padchest_data_loader_2D(Dataset):
             label[idx] = int(label_df[self.chosen_labels[idx]].values[0])
         label = label.float()
 
+        # casting to float16
+        # img = img.half()
+        # label = label.half()
+
         return img, label
 
 
@@ -709,7 +718,7 @@ class padchest_data_loader_2D(Dataset):
         Only using the training set.
         """
 
-        train_df = self.org_df[self.org_df['split'] == 'train']
+        train_df = self.subset_df[self.subset_df['split'] == 'train']
         full_length = len(train_df)
         output_tensor = torch.zeros((len(self.chosen_labels)))
 
@@ -718,6 +727,7 @@ class padchest_data_loader_2D(Dataset):
             output_tensor[idx] = (full_length - disease_length) / (disease_length + epsilon)
 
         return output_tensor
+
 
 
 
@@ -750,7 +760,7 @@ class pedicxr_data_loader_2D(Dataset):
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed_1024')
 
         self.file_base_dir = os.path.join(self.file_base_dir, 'vindr-pcxr')
-        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "master.csv"), sep=',')
+        self.org_df = pd.read_csv(os.path.join(self.file_base_dir, "final_modified_vindr-pcxr.csv"), sep=',')
 
         if image_size == 224:
             self.file_base_dir = os.path.join(self.file_base_dir, 'preprocessed224')
@@ -772,6 +782,9 @@ class pedicxr_data_loader_2D(Dataset):
         self.file_path_list = list(self.subset_df['image_id'])
 
         self.chosen_labels = ['No finding', 'Pneumonia', 'Bronchitis/Bronchiolitis']
+        # self.chosen_labels = ['No finding', 'Pneumonia']
+        print(len(self.file_path_list))
+
 
 
     def __len__(self):
@@ -816,7 +829,7 @@ class pedicxr_data_loader_2D(Dataset):
         Only using the training set.
         """
 
-        train_df = self.org_df[self.org_df['split'] == 'train']
+        train_df = self.subset_df[self.subset_df['split'] == 'train']
         full_length = len(train_df)
         output_tensor = torch.zeros((len(self.chosen_labels)))
 

@@ -2,7 +2,7 @@
 Created on May 4, 2023.
 Train_Valid_vitmed.py
 
-@author: Soroosh Tayebi Arasteh <soroosh.arasteh@rwth-aachen.de>
+@author: Soroosh Tayebi Arasteh
 https://github.com/tayebiarasteh/
 """
 
