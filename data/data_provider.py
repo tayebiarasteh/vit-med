@@ -409,11 +409,13 @@ class UKA_data_loader_2D(Dataset):
 
         self.file_path_list = list(self.subset_df['image_id'])
 
-        self.chosen_labels = ['cardiomegaly', 'congestion', 'pleural_effusion_right', 'pleural_effusion_left', 'pneumonic_infiltrates_right',
-                              'pneumonic_infiltrates_left', 'atelectasis_right', 'atelectasis_left', 'healthy'] # 9 labels
+        # 6 labels
+        self.chosen_labels = ['cardiomegaly', 'congestion', 'pleural_effusion', 'pneumonic_infiltrates', 'atelectasis', 'healthy']
 
-        # using mimic pretraining
-        # self.chosen_labels = ['cardiomegaly', 'pleural_effusion', 'pneumonic_infiltrates', 'atelectasis', 'healthy']
+
+        # self.chosen_labels = ['cardiomegaly', 'congestion', 'pleural_effusion_right', 'pleural_effusion_left', 'pneumonic_infiltrates_right',
+        #                       'pneumonic_infiltrates_left', 'atelectasis_right', 'atelectasis_left', 'healthy'] # 9 labels
+
 
 
 

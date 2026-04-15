@@ -64,7 +64,7 @@ def main_train_2D(global_config_path="/PATH/config.yaml", valid=False,
 
     if dataset_name == 'vindr':
         train_dataset = vindr_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
-        valid_dataset = vindr_data_loader_2D(cfg_path=cfg_path, mode='valid', augment=False, image_size=image_size)
+        valid_dataset = vindr_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'chexpert':
         train_dataset = chexpert_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
         valid_dataset = chexpert_data_loader_2D(cfg_path=cfg_path, mode='valid', augment=False, image_size=image_size)
@@ -82,7 +82,7 @@ def main_train_2D(global_config_path="/PATH/config.yaml", valid=False,
         valid_dataset = padchest_data_loader_2D(cfg_path=cfg_path, mode='valid', augment=False, image_size=image_size)
     elif dataset_name == 'pedi':
         train_dataset = pedicxr_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
-        valid_dataset = pedicxr_data_loader_2D(cfg_path=cfg_path, mode='valid', augment=False, image_size=image_size)
+        valid_dataset = pedicxr_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
 
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size,
                                                pin_memory=True, drop_last=True, shuffle=True, num_workers=10)
@@ -488,7 +488,7 @@ def main_train_after_feature(global_config_path="/PATH/config.yaml", valid=False
 
     if dataset_name == 'vindr':
         train_dataset = vindr_feat_loader(cfg_path=cfg_path, mode='train', image_size=image_size)
-        valid_dataset = vindr_feat_loader(cfg_path=cfg_path, mode='valid', augment=False, image_size=image_size)
+        valid_dataset = vindr_feat_loader(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
     elif dataset_name == 'chexpert':
         train_dataset = chexpert_feat_loader(cfg_path=cfg_path, mode='train', image_size=image_size)
         valid_dataset = chexpert_feat_loader(cfg_path=cfg_path, mode='valid', augment=False, image_size=image_size)
@@ -506,7 +506,7 @@ def main_train_after_feature(global_config_path="/PATH/config.yaml", valid=False
         valid_dataset = padchest_feat_loader(cfg_path=cfg_path, mode='valid', augment=False, image_size=image_size)
     elif dataset_name == 'pedi':
         train_dataset = pedicxr_feat_loader(cfg_path=cfg_path, mode='train', image_size=image_size)
-        valid_dataset = pedicxr_feat_loader(cfg_path=cfg_path, mode='valid', augment=False, image_size=image_size)
+        valid_dataset = pedicxr_feat_loader(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
 
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size,
                                                pin_memory=True, drop_last=True, shuffle=True, num_workers=10)
@@ -604,6 +604,121 @@ def main_test_head_bootstrap(global_config_path="/PATH/config.yaml",
 
 
 
+def make_vindr_noisy_csv(csv_path, out_path=None, noise_rate=0.10, seed=42, noise_mode="asymmetric"):
+    df = pd.read_csv(csv_path)
+    rng = np.random.default_rng(seed)
+
+    chosen_labels = [
+        "Cardiomegaly",
+        "Pleural effusion",
+        "Pneumonia",
+        "Atelectasis",
+        "No finding",
+        "Consolidation",
+        "Pneumothorax",
+        "Pleural thickening",
+        "Lung Opacity",
+        "Pulmonary fibrosis",
+        "Nodule/Mass",
+    ]
+
+    required_cols = ["split"] + chosen_labels
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    noisy_df = df.copy()
+    train_mask = noisy_df["split"].astype(str).str.lower() == "train"
+
+    # We inject noise only into the 10 abnormal labels from the setup.
+    noisy_target_labels = [c for c in chosen_labels if c != "No finding"]
+
+    # These are columns whose non-null values are only 0/1.
+    binary_cols = []
+    for col in noisy_df.columns:
+        vals = pd.Series(noisy_df[col]).dropna().unique().tolist()
+        if len(vals) > 0 and all(v in (0, 1) for v in vals):
+            binary_cols.append(col)
+
+    if "No finding" not in binary_cols:
+        raise ValueError("'No finding' was not detected as a binary label column.")
+
+    # All pathology columns for recomputing No finding:
+    # every binary label except 'No finding'
+    all_abnormal_label_cols = [c for c in binary_cols if c != "No finding"]
+
+    missing_binary = [c for c in noisy_target_labels if c not in all_abnormal_label_cols]
+    if missing_binary:
+        raise ValueError(
+            f"These chosen abnormal labels were not detected as binary label columns: {missing_binary}"
+        )
+
+    summary = {
+        "noise_rate": noise_rate,
+        "noise_mode": noise_mode,
+        "seed": seed,
+        "train_rows": int(train_mask.sum()),
+        "noisy_target_labels": noisy_target_labels,
+        "all_abnormal_label_cols_for_no_finding": all_abnormal_label_cols,
+        "label_flips_per_column": {},
+    }
+
+    # Store clean valid/test labels to ensure they remain unchanged
+    untouched_mask = ~train_mask
+    untouched_before = df.loc[untouched_mask, binary_cols].copy()
+
+    for col in noisy_target_labels:
+        values = noisy_df.loc[train_mask, col].to_numpy(copy=True)
+
+        non_null = pd.Series(values).dropna().unique().tolist()
+        bad = [x for x in non_null if x not in (0, 1)]
+        if bad:
+            raise ValueError(f"Column '{col}' contains non-binary values: {bad}")
+
+        rand = rng.random(values.shape[0])
+
+        if noise_mode == "symmetric":
+            flip_mask = rand < noise_rate
+
+        elif noise_mode == "asymmetric":
+            # More realistic for weak labels:
+            # positives are dropped more often than negatives become positives.
+            pos_flip = (values == 1) & (rand < noise_rate)
+            neg_flip = (values == 0) & (rand < (noise_rate / 4.0))
+            flip_mask = pos_flip | neg_flip
+
+        else:
+            raise ValueError("noise_mode must be 'asymmetric' or 'symmetric'")
+
+        flipped = values.copy()
+        flipped[flip_mask] = 1 - flipped[flip_mask]
+        noisy_df.loc[train_mask, col] = flipped
+
+        summary["label_flips_per_column"][col] = {
+            "n_train_examples": int(values.shape[0]),
+            "n_flipped": int(flip_mask.sum()),
+            "flip_fraction_over_train_rows": float(flip_mask.mean()),
+            "n_positive_before": int((values == 1).sum()),
+            "n_positive_after": int((flipped == 1).sum()),
+        }
+
+    train_abnormal_sum = noisy_df.loc[train_mask, all_abnormal_label_cols].sum(axis=1)
+    noisy_df.loc[train_mask, "No finding"] = (train_abnormal_sum == 0).astype(int)
+
+    untouched_after = noisy_df.loc[untouched_mask, binary_cols]
+    if not untouched_before.equals(untouched_after):
+        raise RuntimeError("Validation/test binary label columns were modified, which should never happen.")
 
 
+    noisy_df.to_csv(out_path, index=False)
+    summary["saved_to"] = out_path
+
+    nf_before = df.loc[train_mask, "No finding"].sum()
+    nf_after = noisy_df.loc[train_mask, "No finding"].sum()
+    summary["no_finding_recomputed_on_train"] = {
+        "n_positive_before": int(nf_before),
+        "n_positive_after": int(nf_after),
+    }
+
+    return noisy_df, summary
 
