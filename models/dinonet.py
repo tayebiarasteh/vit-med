@@ -2,7 +2,7 @@
 Created on Aug 26, 2025.
 dinonet.py
 
-@author: Soroosh Tayebi Arasteh <soroosh.arasteh@rwth-aachen.de>
+@author: Soroosh Tayebi Arasteh
 https://github.com/tayebiarasteh/
 """
 

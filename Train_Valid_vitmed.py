@@ -26,7 +26,7 @@ epsilon = 1e-15
 
 
 class Training:
-    def __init__(self, cfg_path, resume=False, label_names=None):
+    def __init__(self, cfg_path, resume=False, label_names=None, model_name=None):
         """This class represents training and validation processes.
 
         Parameters
@@ -40,6 +40,7 @@ class Training:
         self.params = read_config(cfg_path)
         self.cfg_path = cfg_path
         self.label_names = label_names
+        self.model_name = model_name
 
         if resume == False:
             self.model_info = self.params['Network']
@@ -123,12 +124,15 @@ class Training:
         print('----------------------------------------------------\n')
 
         self.model = model.to(self.device)
+        # self.model = self.model.half() # float16
 
         self.loss_weight = weight.to(self.device)
         self.loss_function = loss_function(pos_weight=self.loss_weight)
         self.optimiser = optimiser
 
         # Saves the model, optimiser,loss function name for writing to config file
+        # self.model_info['model'] = model.__name__
+        # self.model_info['optimiser'] = optimiser.__name__
         self.model_info['total_param_num'] = total_param_num
         self.model_info['loss_function'] = loss_function.__name__
         self.params['Network'] = self.model_info
@@ -160,7 +164,7 @@ class Training:
         self.model = model.to(self.device)
         self.loss_weight = weight
         self.loss_weight = self.loss_weight.to(self.device)
-        self.loss_function = loss_function(weight=self.loss_weight)
+        self.loss_function = loss_function(pos_weight=self.loss_weight)
         self.optimiser = optimiser
         self.label_names = label_names
 
@@ -197,9 +201,26 @@ class Training:
 
                 with torch.set_grad_enabled(True):
 
-                    output = self.model(image)  # for ViT imagenet
-                    # output = self.model.head(output.last_hidden_state.mean(dim=1)) # for ViT dinov2 and v3
-                    # output = self.model.head(output.pooler_output)  # for convnext (both dino & imagnet)
+                    if self.model_name == 'vitb_dinov2':
+                        output = self.model(image)  # for ViT imagenet
+                        output = self.model.head(output.last_hidden_state.mean(dim=1))  # for ViT dinov2 and v3
+
+                    elif self.model_name == 'vitb_dinov3':
+                        output = self.model(image)  # for ViT imagenet
+                        output = self.model.head(output.last_hidden_state.mean(dim=1))  # for ViT dinov2 and v3
+
+                    elif self.model_name == 'vitb_imgnet':
+                        output = self.model(image)  # for ViT imagenet
+
+                    elif self.model_name == 'convnext_dinov3':
+                        output = self.model(image)  # for ViT imagenet
+                        output = self.model.head(output.pooler_output)  # for convnext (both dino & imagnet)
+
+                    elif self.model_name == 'convnext_imgnet':
+                        output = self.model(image)  # for ViT imagenet
+                        output = self.model.head(output.pooler_output)  # for convnext (both dino & imagnet)
+
+
 
                     loss = self.loss_function(output, label) # for multilabel
 
@@ -276,9 +297,24 @@ class Training:
             label = label.to(self.device)
 
             with torch.no_grad():
-                output = self.model(image) # for ViT imagenet
-                # output = self.model.head(output.last_hidden_state.mean(dim=1)) # for ViT dinov2 and v3
-                # output = self.model.head(output.pooler_output) # for convnext (both dino & imagnet)
+                if self.model_name == 'vitb_dinov2':
+                    output = self.model(image)  # for ViT imagenet
+                    output = self.model.head(output.last_hidden_state.mean(dim=1))  # for ViT dinov2 and v3
+
+                elif self.model_name == 'vitb_dinov3':
+                    output = self.model(image)  # for ViT imagenet
+                    output = self.model.head(output.last_hidden_state.mean(dim=1))  # for ViT dinov2 and v3
+
+                elif self.model_name == 'vitb_imgnet':
+                    output = self.model(image)  # for ViT imagenet
+
+                elif self.model_name == 'convnext_dinov3':
+                    output = self.model(image)  # for ViT imagenet
+                    output = self.model.head(output.pooler_output)  # for convnext (both dino & imagnet)
+
+                elif self.model_name == 'convnext_imgnet':
+                    output = self.model(image)  # for ViT imagenet
+                    output = self.model.head(output.pooler_output)  # for convnext (both dino & imagnet)
 
                 output_sigmoided = F.sigmoid(output)
 

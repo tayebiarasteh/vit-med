@@ -25,6 +25,7 @@ from Prediction_vitmed import Prediction
 from data.data_provider import vindr_data_loader_2D, chexpert_data_loader_2D, mimic_data_loader_2D, UKA_data_loader_2D, cxr14_data_loader_2D, padchest_data_loader_2D, pedicxr_data_loader_2D
 from data.feature_data_provider import vindr_feat_loader, padchest_feat_loader, cxr14_feat_loader, chexpert_feat_loader, pedicxr_feat_loader, mimic_feat_loader, UKA_feat_loader
 from models.dinonet import DinoNet
+from models.lora_wrappers import BackboneWithHead, _build_lora_model
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -34,7 +35,7 @@ from huggingface_hub import login
 
 
 def main_train_2D(global_config_path="/PATH/config.yaml", valid=False,
-                  resume=False, augment=False, experiment_name='name', dataset_name='vindr', pretrained=False, vit=False, dino=True, image_size=224, batch_size=30, lr=1e-5):
+                  resume=False, augment=False, experiment_name='name', dataset_name='vindr', pretrained=False, model_name=False, image_size=224, batch_size=30, lr=1e-5):
     """Main function for training + validation centrally
 
         Parameters
@@ -95,36 +96,35 @@ def main_train_2D(global_config_path="/PATH/config.yaml", valid=False,
     else:
         valid_loader = None
 
+
     # Changeable network parameters
-    if vit:
-        if dino:
+    if model_name == 'vitb_dinov2':
+        model = AutoModel.from_pretrained(
+            "facebook/dinov2-base",
+            attn_implementation="sdpa")
+        model.head = torch.nn.Linear(in_features=768, out_features=len(weight))
 
-            #dinov3 and v2 models
-            model = AutoModel.from_pretrained(
-                # "facebook/dinov3-vit7b16-pretrain-lvd1689m",
-                # "facebook/dinov3-vitb16-pretrain-lvd1689m",
-                "facebook/dinov2-base",
-                # torch_dtype=torch.float16,
-                # device_map="auto",
-                attn_implementation="sdpa"
-            )
-            # model.head = torch.nn.Linear(in_features=4096, out_features=len(weight))
-            # model.head = torch.nn.Linear(in_features=768, out_features=len(weight), dtype=torch.float16)
-            model.head = torch.nn.Linear(in_features=768, out_features=len(weight))
+    elif model_name == 'vitb_dinov3':
+        model = AutoModel.from_pretrained(
+            "facebook/dinov3-vitb16-pretrain-lvd1689m",
+            attn_implementation="sdpa")
+        model.head = torch.nn.Linear(in_features=768, out_features=len(weight))
 
+    elif model_name == 'vitb_imgnet':
+        model = load_pretrained_timm_model(num_classes=len(weight), pretrained=pretrained, imgsize=image_size)
 
-            # convnext model
-            # model = AutoModel.from_pretrained(
-            #     "facebook/dinov3-convnext-base-pretrain-lvd1689m",     # dinov3
-            #     # "facebook/convnext-base-224-22k", # imagenet
-            #     use_safetensors=True
-            # )
-            # model.head = torch.nn.Linear(in_features=1024, out_features=len(weight))
+    elif model_name == 'convnext_dinov3':
+        model = AutoModel.from_pretrained(
+            "facebook/dinov3-convnext-base-pretrain-lvd1689m",  # dinov3
+            use_safetensors=True)
+        model.head = torch.nn.Linear(in_features=1024, out_features=len(weight))
 
-        else:
-            model = load_pretrained_timm_model(num_classes=len(weight), pretrained=pretrained, imgsize=image_size)
-    else:
-        model = load_pretrained_timm_model(num_classes=len(weight), model_name='resnet50d', pretrained=pretrained)
+    elif model_name == 'convnext_imgnet':
+        model = AutoModel.from_pretrained(
+            "facebook/convnext-base-224-22k", # imagenet
+            use_safetensors=True)
+        model.head = torch.nn.Linear(in_features=1024, out_features=len(weight))
+
 
     loss_function = BCEWithLogitsLoss
 
@@ -134,15 +134,11 @@ def main_train_2D(global_config_path="/PATH/config.yaml", valid=False,
     params['Network'] = model_info
     write_config(params, cfg_path, sort_keys=True)
 
-    if vit:
-        optimizer = torch.optim.AdamW(model.parameters(), lr=float(lr),
-                                      weight_decay=float(params['Network']['weight_decay']))
-    else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=float(lr),
-                                     weight_decay=float(params['Network']['weight_decay']),
-                                     amsgrad=params['Network']['amsgrad'])
+    optimizer = torch.optim.Adam(model.parameters(), lr=float(lr),
+                                 weight_decay=float(params['Network']['weight_decay']),
+                                 amsgrad=params['Network']['amsgrad'])
 
-    trainer = Training(cfg_path, resume=resume, label_names=label_names)
+    trainer = Training(cfg_path, resume=resume, label_names=label_names, model_name=model_name)
 
     if resume == True:
         trainer.load_checkpoint(model=model, optimiser=optimizer, loss_function=loss_function, weight=weight, label_names=label_names)
@@ -603,6 +599,87 @@ def main_test_head_bootstrap(global_config_path="/PATH/config.yaml",
 
 
 
+def main_train_2D_lora(global_config_path="/PATH/config.yaml", valid=True, resume=False, augment=False,
+                        experiment_name='name', dataset_name='mimic', model_name='vitb_dinov3_lora', image_size=512,
+                        batch_size=16, lr=1e-4, lora_r=16, lora_alpha=32, lora_dropout=0.05):
+    """
+    Main function for LoRA-based training.
+    """
+
+    if resume is True:
+        params = open_experiment(experiment_name, global_config_path)
+    else:
+        params = create_experiment(experiment_name, global_config_path)
+
+    cfg_path = params["cfg_path"]
+    login(token=params["hf_login"])
+
+    if dataset_name == 'vindr':
+        train_dataset = vindr_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = vindr_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+    elif dataset_name == 'chexpert':
+        train_dataset = chexpert_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = chexpert_data_loader_2D(cfg_path=cfg_path, mode='valid', augment=False, image_size=image_size)
+    elif dataset_name == 'mimic':
+        train_dataset = mimic_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = mimic_data_loader_2D(cfg_path=cfg_path, mode='valid', augment=False, image_size=image_size)
+    elif dataset_name == 'UKA':
+        train_dataset = UKA_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = UKA_data_loader_2D(cfg_path=cfg_path, mode='valid', augment=False, image_size=image_size)
+    elif dataset_name == 'cxr14':
+        train_dataset = cxr14_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = cxr14_data_loader_2D(cfg_path=cfg_path, mode='valid', augment=False, image_size=image_size)
+    elif dataset_name == 'padchest':
+        train_dataset = padchest_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = padchest_data_loader_2D(cfg_path=cfg_path, mode='valid', augment=False, image_size=image_size)
+    elif dataset_name == 'pedi':
+        train_dataset = pedicxr_data_loader_2D(cfg_path=cfg_path, mode='train', augment=augment, image_size=image_size)
+        valid_dataset = pedicxr_data_loader_2D(cfg_path=cfg_path, mode='test', augment=False, image_size=image_size)
+
+    train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size,
+                                               pin_memory=True, drop_last=True, shuffle=True, num_workers=10)
+    weight = train_dataset.pos_weight()
+    label_names = train_dataset.chosen_labels
+
+    if valid:
+        valid_loader = torch.utils.data.DataLoader(dataset=valid_dataset, batch_size=batch_size,
+                                                   pin_memory=True, drop_last=False, shuffle=False, num_workers=5)
+    else:
+        valid_loader = None
+
+
+    model, trainer_model_name = _build_lora_model(model_name=model_name, num_classes=len(weight), lora_r=lora_r,
+                                                  lora_alpha=lora_alpha, lora_dropout=lora_dropout)
+
+    loss_function = BCEWithLogitsLoss
+
+    model_info = params['Network']
+    model_info['lr'] = lr
+    model_info['batch_size'] = batch_size
+    model_info['peft_method'] = 'LoRA'
+    model_info['peft_r'] = lora_r
+    model_info['peft_alpha'] = lora_alpha
+    model_info['peft_dropout'] = lora_dropout
+    model_info['peft_model_name'] = model_name
+    params['Network'] = model_info
+    write_config(params, cfg_path, sort_keys=True)
+
+    optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()),
+        lr=float(lr), weight_decay=float(params['Network']['weight_decay']),
+        amsgrad=params['Network']['amsgrad'])
+
+    trainer = Training(cfg_path, resume=resume, label_names=label_names, model_name=trainer_model_name)
+
+    if resume == True:
+        trainer.load_checkpoint(model=model, optimiser=optimizer, loss_function=loss_function, weight=weight, label_names=label_names)
+    else:
+        trainer.setup_model(model=model, optimiser=optimizer, loss_function=loss_function, weight=weight)
+    trainer.train_epoch(train_loader=train_loader, valid_loader=valid_loader, num_epochs=params['Network']['num_epochs'])
+
+
+
+
+
 
 def make_vindr_noisy_csv(csv_path, out_path=None, noise_rate=0.10, seed=42, noise_mode="asymmetric"):
     df = pd.read_csv(csv_path)
@@ -721,4 +798,5 @@ def make_vindr_noisy_csv(csv_path, out_path=None, noise_rate=0.10, seed=42, nois
     }
 
     return noisy_df, summary
+
 

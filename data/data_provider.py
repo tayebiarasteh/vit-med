@@ -72,9 +72,6 @@ class vindr_data_loader_2D(Dataset):
 
         self.chosen_labels = ['Cardiomegaly', 'Pleural effusion', 'Pneumonia', 'Atelectasis', 'No finding', 'Consolidation', 'Pneumothorax', 'Pleural thickening', 'Lung Opacity', 'Pulmonary fibrosis', 'Nodule/Mass'] # all labels (11)
 
-        # using mimic pretraining
-        # self.chosen_labels = ['Cardiomegaly', 'Pleural effusion', 'Pneumonia', 'Atelectasis', 'No finding', 'Consolidation', 'Pneumothorax', 'Lung Opacity']
-
 
 
     def __len__(self):
@@ -108,10 +105,6 @@ class vindr_data_loader_2D(Dataset):
         for idx in range(len(self.chosen_labels)):
             label[idx] = int(label_df[self.chosen_labels[idx]].values[0])
         label = label.float()
-
-        # casting to float16
-        # img = img.half()
-        # label = label.half()
 
         return img, label
 
