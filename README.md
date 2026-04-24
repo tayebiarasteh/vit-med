@@ -6,21 +6,52 @@
 European Radiology Experimental, 2024.  
 DOI: https://doi.org/10.1186/s41747-023-00411-3
 
-2) **High-resolution self-supervised learning with DINOv3 advances chest radiograph analysis**
+2) [Resolution scaling governs DINOv3 transfer performance in chest radiograph classification](https://arxiv.org/abs/2510.07191)
 
 
-## Prerequisites
+## Environment setup
 
-The software is developed in **Python 3.9**. For deep learning, the **PyTorch 2.8** framework is used.
+Training and evaluation were performed strictly in FP32. 
+Implementation details: Python 3.9 with PyTorch 2.8 and torchvision 0.23. Core libraries: NumPy 1.22, SciPy 1.10, scikit-learn 1.2, pandas 1.4, timm 0.6, and OpenCV (cv2) 4.7. Hugging Face tooling: transformers 4.56, huggingface-hub 0.34, datasets 2.19, accelerate 1.10, tokenizers 0.21, and safetensors 0.4.
 
-Main Python modules required for the software can be installed from `./requirements.yaml`:
+### Prerequisites
+
+The codebase was originally developed with earlier library versions; however, the configuration below provides a fully compatible and CUDA-enabled environment validated on modern NVIDIA GPUs.  
+PyTorch is installed via official wheels with CUDA support to avoid dependency conflicts, and all remaining packages are installed through `pip`.  
+No system-wide CUDA toolkit installation is required, as the PyTorch wheels bundle the necessary CUDA runtime.
+
 
 ```
-$ conda env create -f requirements.yaml
-$ conda activate vitmed
+$ conda create -n NAME python=3.11 -y
+$ conda activate NAME
+$ python -m pip install --upgrade pip
 ```
 
-**Note:** This might take a few minutes.
+```
+$ python -m pip install \
+  torch==2.8 \
+  torchvision \
+  torchaudio \
+  --index-url https://download.pytorch.org/whl/cu130
+```
+
+```
+$ python -m pip install \
+  accelerate \
+  transformers \
+  tokenizers \
+  safetensors \
+  huggingface-hub \
+  matplotlib \
+  pandas \
+  timm \
+  tensorboardX \
+  tqdm \
+  jupyter \
+  scikit-learn \
+  opencv-python \
+  opacus
+```
 
 
 ---
@@ -86,13 +117,14 @@ S. Tayebi Arasteh, L. Misera, J.N. Kather, D. Truhn, S. Nebelung. *Enhancing dia
 
 **Paper 2**
 
-S. Tayebi Arasteh, et al. High-resolution self-supervised learning with DINOv3 advances chest radiograph analysis. 2025.
+S. Tayebi Arasteh, et al. *Resolution scaling governs DINOv3 transfer performance in chest radiograph classification*. arXiv:2510.07191, 2025.
 
 ```bibtex
 @article{dinov3_cxr_2025,
-  author  = {Tayebi Arasteh, Soroosh and others},
-  title   = {High-resolution self-supervised learning with DINOv3 advances chest radiograph analysis},
+  author  = {Soroosh Tayebi Arasteh and Mina Shaigan and Christiane Kuhl and Jakob Nikolas Kather and Sven Nebelung and Daniel Truhn},
+  title   = {Resolution scaling governs DINOv3 transfer performance in chest radiograph classification},
   year    = {2025},
-  doi     = {},
-  url     = {}
+  journal = {arXiv:2510.07191},
+  doi     = {https://doi.org/10.48550/arXiv.2510.07191},
+  url     = {https://arxiv.org/abs/2510.07191}
 }
