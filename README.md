@@ -6,7 +6,10 @@
 European Radiology Experimental, 2024.  
 DOI: https://doi.org/10.1186/s41747-023-00411-3
 
-2) [Resolution scaling governs DINOv3 transfer performance in chest radiograph classification](https://arxiv.org/abs/2510.07191)
+2) **Resolution-dependent self-supervised transfer in chest radiograph classification**  
+Communications Medicine, 2026.  
+DOI: https://doi.org/10.1038/s43856-026-01897-9
+
 
 
 ## Environment setup
@@ -117,14 +120,14 @@ S. Tayebi Arasteh, L. Misera, J.N. Kather, D. Truhn, S. Nebelung. *Enhancing dia
 
 **Paper 2**
 
-S. Tayebi Arasteh, et al. *Resolution scaling governs DINOv3 transfer performance in chest radiograph classification*. arXiv:2510.07191, 2025.
+S. Tayebi Arasteh, et al. *Resolution-dependent self-supervised transfer in chest radiograph classification*. Communications Medicine, 6, 2026. https://doi.org/10.1038/s43856-026-01897-9.
 
 ```bibtex
-@article{dinov3_cxr_2025,
+@article{dinov3_cxr_2026,
   author  = {Soroosh Tayebi Arasteh and Mina Shaigan and Christiane Kuhl and Jakob Nikolas Kather and Sven Nebelung and Daniel Truhn},
-  title   = {Resolution scaling governs DINOv3 transfer performance in chest radiograph classification},
-  year    = {2025},
-  journal = {arXiv:2510.07191},
-  doi     = {https://doi.org/10.48550/arXiv.2510.07191},
-  url     = {https://arxiv.org/abs/2510.07191}
+  title   = {Resolution-dependent self-supervised transfer in chest radiograph classification},
+  year    = {2026},
+  volume = {6},
+  journal = {Communications Medicine},
+  doi     = {https://doi.org/10.1038/s43856-026-01897-9},
 }
